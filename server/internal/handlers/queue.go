@@ -44,6 +44,10 @@ func AddQueueItem(state *app.State) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "账户子公司 (" + acc.Zone + ") 必须与 VPS 订阅子公司 (" + body.VpsSpec.Subsidiary + ") 一致"})
 				return
 			}
+			if strings.EqualFold(body.VpsSpec.OSTrack, "windows") && strings.TrimSpace(body.VpsSpec.OSImage) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Windows 轨必须指定镜像名"})
+				return
+			}
 		}
 		if body.RetryInterval == 0 {
 			body.RetryInterval = 30
