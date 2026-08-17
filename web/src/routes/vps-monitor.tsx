@@ -49,6 +49,7 @@ import {
   useVPSMonitorHistory,
   type VPSSubscription,
 } from "@/hooks/use-vps-monitor";
+import { useVPSCatalog, type VpsCatalogPlan } from "@/hooks/use-vps-catalog";
 import { useTelegramVerify } from "@/hooks/use-telegram";
 
 /** VPS 补货通知 */
@@ -56,16 +57,16 @@ export const Route = createFileRoute("/vps-monitor")({
   component: VPSMonitorPage,
 });
 
-const VPS_MODELS = [
-  { value: "vps-2025-model1", label: "VPS-1" },
-  { value: "vps-2025-model2", label: "VPS-2" },
-  { value: "vps-2025-model3", label: "VPS-3" },
-  { value: "vps-2025-model4", label: "VPS-4" },
-  { value: "vps-2025-model5", label: "VPS-5" },
-  { value: "vps-2025-model6", label: "VPS-6" },
-];
+const KNOWN_LABELS: Record<string, string> = {
+  "vps-2027-model1": "VPS-1 2027",
+  "vps-2027-model2": "VPS-2 2027",
+  "vps-2027-model2.LZ": "VPS-2 Local Zone 2027",
+  "vps-2027-model3": "VPS-3 2027",
+  "vps-2027-model4": "VPS-4 2027",
+};
 
 const SUBSIDIARIES = [
+  { value: "US", label: "US 美国" },
   { value: "IE", label: "IE 爱尔兰" },
   { value: "FR", label: "FR 法国" },
   { value: "GB", label: "GB 英国" },
@@ -74,11 +75,10 @@ const SUBSIDIARIES = [
   { value: "IT", label: "IT 意大利" },
   { value: "PL", label: "PL 波兰" },
   { value: "CA", label: "CA 加拿大" },
-  { value: "US", label: "US 美国" },
 ];
 
 function modelLabel(code: string): string {
-  return VPS_MODELS.find((m) => m.value === code)?.label || code;
+  return KNOWN_LABELS[code] || code;
 }
 
 function VPSMonitorPage() {
@@ -264,6 +264,7 @@ function VPSRow({
               <span className="font-semibold text-sm">{modelLabel(sub.planCode)}</span>
               <span className="font-mono text-[11px] text-muted-foreground">{sub.planCode}</span>
               <Chip tone="default">{sub.ovhSubsidiary}</Chip>
+              {sub.planCode.includes(".LZ") && <Chip tone="info">Local Zone</Chip>}
             </div>
             <p className="text-xs text-muted-foreground mb-1.5">
               {sub.datacenters.length > 0
@@ -391,53 +392,67 @@ function AddVPSDialog({
   const create = useCreateVPSMonitorSubscription();
   const tgVerify = useTelegramVerify();
   const tgBlocked = tgVerify.data ? !tgVerify.data.ok : false;
-  const [vpsModel, setVpsModel] = useState(VPS_MODELS[0].value);
-  const [ovhSubsidiary, setOvhSubsidiary] = useState("IE");
-  const [datacenters, setDatacenters] = useState("");
+  const [ovhSubsidiary, setOvhSubsidiary] = useState("US");
+  const catalog = useVPSCatalog(ovhSubsidiary);
+  const [familyId, setFamilyId] = useState("vps-2027");
+  const [vpsModel, setVpsModel] = useState("");
+  const [selectedDCs, setSelectedDCs] = useState<string[]>([]);
   const [monitorLinux, setMonitorLinux] = useState(true);
-  const [monitorWindows, setMonitorWindows] = useState(true);
+  const [monitorWindows, setMonitorWindows] = useState(false);
   const [notifyAvailable, setNotifyAvailable] = useState(true);
   const [notifyUnavailable, setNotifyUnavailable] = useState(false);
   const [autoOrder, setAutoOrder] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [autoOrderAccountId, setAutoOrderAccountId] = useState("");
+  const [osImage, setOsImage] = useState("");
+  const [backupPlan, setBackupPlan] = useState("1");
+
+  const families = catalog.data?.families || [];
+  const family = families.find((f) => f.id === familyId) || families[0];
+  const plans = family?.plans || [];
+  const selectedPlan: VpsCatalogPlan | undefined =
+    plans.find((p) => p.planCode === vpsModel) || plans[0];
 
   const reset = () => {
-    setVpsModel(VPS_MODELS[0].value);
-    setOvhSubsidiary("IE");
-    setDatacenters("");
+    setFamilyId("vps-2027");
+    setVpsModel("");
+    setSelectedDCs([]);
     setMonitorLinux(true);
-    setMonitorWindows(true);
+    setMonitorWindows(false);
     setNotifyAvailable(true);
     setNotifyUnavailable(false);
     setAutoOrder(false);
     setQuantity(1);
     setAutoOrderAccountId("");
+    setOsImage("");
+    setBackupPlan("1");
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const dcs = datacenters
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
-
+    const plan = selectedPlan;
+    if (!plan) {
+      toast.error("请选择 VPS 型号");
+      return;
+    }
     if (autoOrder && !autoOrderAccountId) {
       toast.error("开启自动下单时必须选 OVH 账户");
       return;
     }
     create.mutate(
       {
-        planCode: vpsModel,
+        planCode: plan.planCode,
         ovhSubsidiary,
-        datacenters: dcs,
+        datacenters: selectedDCs,
         monitorLinux,
-        monitorWindows,
+        monitorWindows: plan.supportsWindows ? monitorWindows : false,
         notifyAvailable,
         notifyUnavailable,
         autoOrder,
         quantity: autoOrder ? quantity : undefined,
         autoOrderAccountId: autoOrder ? autoOrderAccountId : "",
+        osImage: osImage || undefined,
+        backupPlan,
       },
       {
         onSuccess: () => {
@@ -486,26 +501,16 @@ function AddVPSDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                VPS 型号 <span className="text-destructive">*</span>
-              </label>
-              <Select value={vpsModel} onValueChange={setVpsModel}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VPS_MODELS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label} ({m.value})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                 OVH 子公司
               </label>
-              <Select value={ovhSubsidiary} onValueChange={setOvhSubsidiary}>
+              <Select
+                value={ovhSubsidiary}
+                onValueChange={(v) => {
+                  setOvhSubsidiary(v);
+                  setVpsModel("");
+                  setSelectedDCs([]);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -518,17 +523,89 @@ function AddVPSDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                系列
+              </label>
+              <Select
+                value={family?.id || familyId}
+                onValueChange={(v) => {
+                  setFamilyId(v);
+                  setVpsModel("");
+                  setSelectedDCs([]);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={catalog.isPending ? "加载目录…" : "选择系列"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {families.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                VPS 型号 <span className="text-destructive">*</span>
+              </label>
+              <Select
+                value={selectedPlan?.planCode || ""}
+                onValueChange={(v) => {
+                  setVpsModel(v);
+                  setSelectedDCs([]);
+                  setOsImage("");
+                  const p = plans.find((x) => x.planCode === v);
+                  if (p && !p.supportsWindows) setMonitorWindows(false);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={catalog.isPending ? "加载型号…" : "选择型号"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {plans.map((p) => (
+                    <SelectItem key={p.planCode} value={p.planCode}>
+                      {p.invoiceName} ({p.planCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              数据中心代码（可选，多个用逗号分隔）
+              数据中心（不选 = 全部）
             </label>
-            <Input
-              value={datacenters}
-              onChange={(e) => setDatacenters(e.target.value)}
-              placeholder="例如: eu-west-gra,ca-east-bhs 或留空监控所有"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+              {(selectedPlan?.datacenters || []).map((dc) => {
+                const key = dc.code || dc.name;
+                const checked = selectedDCs.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 text-sm rounded-lg border border-border px-2.5 py-2"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        setSelectedDCs((cur) =>
+                          v ? [...cur, key] : cur.filter((x) => x !== key)
+                        );
+                      }}
+                    />
+                    <span className="truncate">
+                      {dc.name}
+                      {dc.code ? (
+                        <span className="text-[11px] text-muted-foreground"> {dc.code}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           <div>
@@ -541,12 +618,22 @@ function AddVPSDialog({
                 />
                 <span className="text-sm">Linux</span>
               </label>
-              <label className="flex items-center gap-2.5 cursor-pointer rounded-xl border border-border px-3.5 py-2.5 hover:bg-muted/40 transition-colors">
+              <label
+                className={`flex items-center gap-2.5 rounded-xl border border-border px-3.5 py-2.5 ${
+                  selectedPlan?.supportsWindows
+                    ? "cursor-pointer hover:bg-muted/40"
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
                 <Checkbox
-                  checked={monitorWindows}
+                  checked={!!selectedPlan?.supportsWindows && monitorWindows}
+                  disabled={!selectedPlan?.supportsWindows}
                   onCheckedChange={(v) => setMonitorWindows(!!v)}
                 />
-                <span className="text-sm">Windows</span>
+                <span className="text-sm">
+                  Windows
+                  {!selectedPlan?.supportsWindows ? "（此型号无）" : ""}
+                </span>
               </label>
             </div>
           </div>
@@ -591,12 +678,12 @@ function AddVPSDialog({
                 <Input
                   type="number"
                   min={1}
-                  max={100}
+                  max={20}
                   value={quantity}
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     if (Number.isFinite(v)) {
-                      setQuantity(Math.max(1, Math.min(100, Math.floor(v))));
+                      setQuantity(Math.max(1, Math.min(20, Math.floor(v))));
                     }
                   }}
                 />

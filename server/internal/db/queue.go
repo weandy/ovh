@@ -25,6 +25,8 @@ type queueRow struct {
 	Priority           int     `db:"priority"`
 	FromTelegram       int     `db:"from_telegram"`
 	ConfigSniperTaskID string  `db:"config_sniper_task_id"`
+	ProductKind        string  `db:"product_kind"`
+	VpsSpecJSON        string  `db:"vps_spec"`
 }
 
 func rowToQueueItem(r queueRow) types.QueueItem {
@@ -34,6 +36,17 @@ func rowToQueueItem(r queueRow) types.QueueItem {
 	}
 	if opts == nil {
 		opts = []string{}
+	}
+	var spec *types.VpsOrderSpec
+	if r.VpsSpecJSON != "" {
+		var s types.VpsOrderSpec
+		if err := json.Unmarshal([]byte(r.VpsSpecJSON), &s); err == nil {
+			spec = &s
+		}
+	}
+	kind := r.ProductKind
+	if kind == "" {
+		kind = "eco"
 	}
 	return types.QueueItem{
 		ID:                 r.ID,
@@ -52,6 +65,8 @@ func rowToQueueItem(r queueRow) types.QueueItem {
 		Priority:           r.Priority,
 		FromTelegram:       r.FromTelegram == 1,
 		ConfigSniperTaskID: r.ConfigSniperTaskID,
+		ProductKind:        kind,
+		VpsSpec:            spec,
 	}
 }
 
@@ -62,6 +77,18 @@ func queueItemToRow(q types.QueueItem) (queueRow, error) {
 	optsJSON, err := json.Marshal(q.Options)
 	if err != nil {
 		return queueRow{}, err
+	}
+	kind := q.ProductKind
+	if kind == "" {
+		kind = "eco"
+	}
+	specJSON := ""
+	if q.VpsSpec != nil {
+		b, err := json.Marshal(q.VpsSpec)
+		if err != nil {
+			return queueRow{}, err
+		}
+		specJSON = string(b)
 	}
 	bi := func(b bool) int {
 		if b {
@@ -86,6 +113,8 @@ func queueItemToRow(q types.QueueItem) (queueRow, error) {
 		Priority:           q.Priority,
 		FromTelegram:       bi(q.FromTelegram),
 		ConfigSniperTaskID: q.ConfigSniperTaskID,
+		ProductKind:        kind,
+		VpsSpecJSON:        specJSON,
 	}, nil
 }
 
@@ -122,11 +151,11 @@ func (db *DB) ReplaceQueue(items []types.QueueItem) error {
 			INSERT INTO queue
 			(id, account_id, plan_code, datacenter, options, status, created_at, updated_at,
 			 retry_interval, retry_count, max_retries, last_check_time,
-			 quick_order, priority, from_telegram, config_sniper_task_id)
+			 quick_order, priority, from_telegram, config_sniper_task_id, product_kind, vps_spec)
 			VALUES
 			(:id, :account_id, :plan_code, :datacenter, :options, :status, :created_at, :updated_at,
 			 :retry_interval, :retry_count, :max_retries, :last_check_time,
-			 :quick_order, :priority, :from_telegram, :config_sniper_task_id)
+			 :quick_order, :priority, :from_telegram, :config_sniper_task_id, :product_kind, :vps_spec)
 		`, r)
 		if err != nil {
 			return fmt.Errorf("insert queue %s: %w", q.ID, err)

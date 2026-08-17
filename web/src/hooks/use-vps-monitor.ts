@@ -16,6 +16,8 @@ export interface VPSSubscription {
   quantity?: number;
   /** 触发 auto-order 时用哪个 OVH 账户下单(空 = 只通知) */
   autoOrderAccountId?: string;
+  osImage?: string;
+  backupPlan?: string;
   lastStatus: Record<string, string>;
   createdAt: string;
 }
@@ -88,7 +90,8 @@ export function useAddVPSSubscription() {
       qc.invalidateQueries({ queryKey: qk.vpsMonitor.status() });
       toast.success("VPS 订阅已添加");
     },
-    onError: (e: any) => toast.error(e.response?.data?.error || "添加失败"),
+    onError: (e: any) =>
+      toast.error(e.response?.data?.message || e.response?.data?.error || "添加失败"),
   });
 }
 

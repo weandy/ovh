@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -55,21 +56,56 @@ func AddVPSSubscription(state *app.State) gin.HandlerFunc {
 			MonitorWindows     *bool    `json:"monitorWindows"`
 			NotifyAvailable    *bool    `json:"notifyAvailable"`
 			NotifyUnavailable  *bool    `json:"notifyUnavailable"`
-			AutoOrderAccountID string   `json:"autoOrderAccountId"` // 空 = 触发时只通知不下单
+			AutoOrder          bool     `json:"autoOrder"`
+			Quantity           int      `json:"quantity"`
+			AutoOrderAccountID string   `json:"autoOrderAccountId"`
+			OSImage            string   `json:"osImage"`
+			BackupPlan         string   `json:"backupPlan"`
 		}
 		_ = c.ShouldBindJSON(&body)
 		if body.PlanCode == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "缺少planCode参数"})
 			return
 		}
+		if body.OvhSubsidiary == "" {
+			body.OvhSubsidiary = "IE"
+		}
+		if body.AutoOrder && body.AutoOrderAccountID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "开启自动下单时必须选择 OVH 账户"})
+			return
+		}
 		if body.AutoOrderAccountID != "" {
-			if _, ok := state.FindAccount(body.AutoOrderAccountID); !ok {
+			acc, ok := state.FindAccount(body.AutoOrderAccountID)
+			if !ok {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "autoOrderAccountId 不存在"})
 				return
 			}
+			if !strings.EqualFold(acc.Zone, body.OvhSubsidiary) {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "下单账户子公司 (" + acc.Zone + ") 必须与订阅 (" + body.OvhSubsidiary + ") 一致"})
+				return
+			}
 		}
-		if body.OvhSubsidiary == "" {
-			body.OvhSubsidiary = "IE"
+		if body.Quantity <= 0 {
+			body.Quantity = 1
+		}
+		if body.Quantity > 20 {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "quantity 不能超过 20"})
+			return
+		}
+		if body.BackupPlan == "" {
+			body.BackupPlan = "1"
+		}
+		if body.BackupPlan != "1" && body.BackupPlan != "7" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "backupPlan 只能是 1 或 7"})
+			return
+		}
+		if body.MonitorWindows != nil && *body.MonitorWindows {
+			if plans, err := vps.LoadPlans(state, body.OvhSubsidiary); err == nil {
+				if plan, ok := vps.FindPlan(plans, body.PlanCode); ok && !vps.SupportsWindows(plan) {
+					c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "该型号不提供 Windows（Local Zone / VPS-1 2027）"})
+					return
+				}
+			}
 		}
 		monitorLinux := true
 		if body.MonitorLinux != nil {
@@ -108,7 +144,11 @@ func AddVPSSubscription(state *app.State) gin.HandlerFunc {
 			LastStatus:         map[string]string{},
 			History:            []map[string]interface{}{},
 			CreatedAt:          types.NowISO(),
+			AutoOrder:          body.AutoOrder,
+			Quantity:           body.Quantity,
 			AutoOrderAccountID: body.AutoOrderAccountID,
+			OSImage:            body.OSImage,
+			BackupPlan:         body.BackupPlan,
 		}
 		state.VPSSubscriptions = append(state.VPSSubscriptions, sub)
 		state.VPSSubsMu.Unlock()
@@ -236,9 +276,9 @@ func GetVPSMonitorStatus(state *app.State) gin.HandlerFunc {
 		interval := state.VPSCheckInterval
 		state.VPSSubsMu.Unlock()
 		c.JSON(http.StatusOK, gin.H{
-			"running":              vps.Running(),
-			"subscriptions_count":  count,
-			"check_interval":       interval,
+			"running":             vps.Running(),
+			"subscriptions_count": count,
+			"check_interval":      interval,
 		})
 	}
 }

@@ -443,8 +443,12 @@ func recordSuccess(state *app.State, item *types.QueueItem, orderID, orderURL, e
 			if priceInfo != nil {
 				state.History[i].Price = priceInfo
 			}
+			state.History[i].ProductKind = item.ProductKind
+			state.History[i].VpsSpec = item.VpsSpec
 			state.Logger.Info("更新抢购历史(成功) 任务ID: "+item.ID, "purchase")
-			go state.SaveHistory()
+			if state.DB != nil {
+				go state.SaveHistory()
+			}
 			return
 		}
 	}
@@ -468,9 +472,13 @@ func recordSuccess(state *app.State, item *types.QueueItem, orderID, orderURL, e
 	if priceInfo != nil {
 		entry.Price = priceInfo
 	}
+	entry.ProductKind = item.ProductKind
+	entry.VpsSpec = item.VpsSpec
 	state.History = append(state.History, entry)
 	state.Logger.Info("创建抢购历史(成功) 任务ID: "+item.ID, "purchase")
-	go state.SaveHistory()
+	if state.DB != nil {
+		go state.SaveHistory()
+	}
 }
 
 func recordFailure(state *app.State, item *types.QueueItem, errMsg string) {
@@ -489,8 +497,12 @@ func recordFailure(state *app.State, item *types.QueueItem, errMsg string) {
 			state.History[i].PurchaseTime = now
 			state.History[i].AttemptCount = item.RetryCount
 			state.History[i].Options = item.Options
+			state.History[i].ProductKind = item.ProductKind
+			state.History[i].VpsSpec = item.VpsSpec
 			state.Logger.Info("更新抢购历史(失败) 任务ID: "+item.ID, "purchase")
-			go state.SaveHistory()
+			if state.DB != nil {
+				go state.SaveHistory()
+			}
 			return
 		}
 	}
@@ -506,10 +518,14 @@ func recordFailure(state *app.State, item *types.QueueItem, errMsg string) {
 		ErrorMessage: &em,
 		PurchaseTime: now,
 		AttemptCount: item.RetryCount,
+		ProductKind:  item.ProductKind,
+		VpsSpec:      item.VpsSpec,
 	}
 	state.History = append(state.History, entry)
 	state.Logger.Info("创建抢购历史(失败) 任务ID: "+item.ID, "purchase")
-	go state.SaveHistory()
+	if state.DB != nil {
+		go state.SaveHistory()
+	}
 }
 
 // backfillOrderDetail 下单成功后异步补 history 行的 expirationTime + price。

@@ -147,7 +147,12 @@ func ProcessQueueLoop(state *app.State) {
 					state.Logger.Info("重试检查任务 "+it.ID+": "+it.PlanCode+" 在 "+it.Datacenter, "queue")
 				}
 
-				success := PurchaseServer(state, &snapshot)
+				success := false
+				if snapshot.ProductKind == "vps" {
+					success = PurchaseVPS(state, &snapshot)
+				} else {
+					success = PurchaseServer(state, &snapshot)
+				}
 				if success {
 					state.QueueMu.Lock()
 					for i := range state.Queue {

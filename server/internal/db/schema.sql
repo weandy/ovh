@@ -51,7 +51,9 @@ CREATE TABLE IF NOT EXISTS queue (
   quick_order            INTEGER NOT NULL DEFAULT 0,
   priority               INTEGER NOT NULL DEFAULT 0,
   from_telegram          INTEGER NOT NULL DEFAULT 0,
-  config_sniper_task_id  TEXT    NOT NULL DEFAULT ''
+  config_sniper_task_id  TEXT    NOT NULL DEFAULT '',
+  product_kind           TEXT    NOT NULL DEFAULT 'eco',
+  vps_spec               TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_queue_status     ON queue(status);
 CREATE INDEX IF NOT EXISTS idx_queue_plan_code  ON queue(plan_code);
@@ -72,7 +74,9 @@ CREATE TABLE IF NOT EXISTS history (
   purchase_time   TEXT NOT NULL,
   attempt_count   INTEGER NOT NULL DEFAULT 0,
   expiration_time TEXT NOT NULL DEFAULT '',
-  price           TEXT                        -- JSON nullable (PriceInfo)
+  price           TEXT,                       -- JSON nullable (PriceInfo)
+  product_kind    TEXT NOT NULL DEFAULT 'eco',
+  vps_spec        TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_history_status        ON history(status);
 CREATE INDEX IF NOT EXISTS idx_history_purchase_time ON history(purchase_time DESC);
@@ -119,7 +123,11 @@ CREATE TABLE IF NOT EXISTS vps_subscriptions (
   notify_unavailable  INTEGER NOT NULL DEFAULT 0,
   last_status         TEXT NOT NULL DEFAULT '{}',  -- JSON map
   history             TEXT NOT NULL DEFAULT '[]',  -- JSON []
-  created_at          TEXT NOT NULL
+  created_at          TEXT NOT NULL,
+  auto_order          INTEGER NOT NULL DEFAULT 0,
+  quantity            INTEGER NOT NULL DEFAULT 1,
+  os_image            TEXT NOT NULL DEFAULT '',
+  backup_plan         TEXT NOT NULL DEFAULT '1'
 );
 CREATE INDEX IF NOT EXISTS idx_vps_plan_code ON vps_subscriptions(plan_code);
 
@@ -131,6 +139,15 @@ CREATE TABLE IF NOT EXISTS catalogs (
   subsidiary TEXT PRIMARY KEY,
   data       TEXT NOT NULL,   -- 完整 catalog JSON
   updated_at INTEGER NOT NULL -- Unix epoch ms
+);
+
+-- ===========================================
+-- vps_catalogs: 公开 VPS catalog，按 subsidiary 缓存，与 Eco catalogs 分开
+-- ===========================================
+CREATE TABLE IF NOT EXISTS vps_catalogs (
+  subsidiary TEXT PRIMARY KEY,
+  data       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 
 -- (旧:config_sniper_tasks 表已删除,功能下线。老数据库残留的该表 / config_sniper_task_id 列保留不动,

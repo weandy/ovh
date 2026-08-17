@@ -611,6 +611,9 @@ function QueueRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="font-mono font-semibold text-sm">{item.planCode}</span>
+            {item.productKind === "vps" && (
+              <Chip tone="info">VPS{item.vpsSpec?.osTrack ? ` · ${item.vpsSpec.osTrack}` : ""}</Chip>
+            )}
             <AccountChip accountId={item.accountId} />
             <Chip tone="default">DC {item.datacenter.toUpperCase()}</Chip>
             {item.options && item.options.length > 0 && (

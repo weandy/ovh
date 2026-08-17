@@ -336,6 +336,8 @@ func main() {
 			vc.DELETE("/:service_name/mitigation/:ip", handlers.DisableVpsMitigation(state))
 		}
 
+		api.GET("/vps-catalog", handlers.GetVPSCatalog(state))
+
 		// VPS monitor
 		api.GET("/vps-monitor/subscriptions", handlers.GetVPSSubscriptions(state))
 		api.POST("/vps-monitor/subscriptions", handlers.AddVPSSubscription(state))

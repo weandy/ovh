@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ovh-buy/server/internal/app"
-	"github.com/ovh-buy/server/internal/numconv"
+	"github.com/ovh-buy/server/internal/purchase"
 	"github.com/ovh-buy/server/internal/telegram"
 	"github.com/ovh-buy/server/internal/types"
 )
@@ -95,6 +95,18 @@ func CheckVPSDCAvailability(state *app.State, planCode, ovhSubsidiary string) ma
 	return data
 }
 
+func FetchRuleStock(state *app.State, planCode, ovhSubsidiary string) ([]DatacenterStock, error) {
+	data := CheckVPSDCAvailability(state, planCode, ovhSubsidiary)
+	if data == nil {
+		return nil, fmt.Errorf("no rule data for %s", planCode)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDatacenters(raw)
+}
+
 // SaveSubscriptions 把订阅 + check_interval 写回 SQLite
 func SaveSubscriptions(state *app.State) error {
 	state.VPSSubsMu.Lock()
@@ -115,20 +127,25 @@ func SaveSubscriptions(state *app.State) error {
 }
 
 var vpsModelMap = map[string]string{
-	"vps-2025-model1": "VPS-1",
-	"vps-2025-model2": "VPS-2",
-	"vps-2025-model3": "VPS-3",
-	"vps-2025-model4": "VPS-4",
-	"vps-2025-model5": "VPS-5",
-	"vps-2025-model6": "VPS-6",
+	"vps-2025-model1":    "VPS-1",
+	"vps-2025-model2":    "VPS-2",
+	"vps-2025-model3":    "VPS-3",
+	"vps-2025-model4":    "VPS-4",
+	"vps-2025-model5":    "VPS-5",
+	"vps-2025-model6":    "VPS-6",
+	"vps-2027-model1":    "VPS-1 2027",
+	"vps-2027-model2":    "VPS-2 2027",
+	"vps-2027-model3":    "VPS-3 2027",
+	"vps-2027-model4":    "VPS-4 2027",
+	"vps-2027-model2.LZ": "VPS-2 Local Zone 2027",
 }
 
 var statusMap = map[string]string{
-	"available":                       "现货",
-	"out-of-stock":                    "无货",
-	"out-of-stock-preorder-allowed":   "缺货（可预订）",
-	"unavailable":                     "不可用",
-	"unknown":                         "未知",
+	"available":                     "现货",
+	"out-of-stock":                  "无货",
+	"out-of-stock-preorder-allowed": "缺货（可预订）",
+	"unavailable":                   "不可用",
+	"unknown":                       "未知",
 }
 
 // SendSummaryNotification 对应 Python: send_vps_summary_notification
@@ -163,7 +180,10 @@ func SendSummaryNotification(state *app.State, planCode string, dcs []map[string
 		name, _ := dc["name"].(string)
 		code, _ := dc["code"].(string)
 		sb.WriteString(fmt.Sprintf("%d. %s (%s)\n   状态: %s", idx+1, name, code, statusCN))
-		if days, ok := numconv.ToInt64(dc["days"]); ok && days > 0 {
+		if track, _ := dc["track"].(string); track != "" {
+			sb.WriteString(" | 系统: " + track)
+		}
+		if days, ok := dc["days"].(int); ok && days > 0 {
 			sb.WriteString(fmt.Sprintf(" | 预计交付: %d天", days))
 		}
 		sb.WriteString("\n")
@@ -216,12 +236,11 @@ func MonitorLoop(state *app.State) {
 				if ovhSub == "" {
 					ovhSub = "IE"
 				}
-				currentData := CheckVPSDCAvailability(state, sub.PlanCode, ovhSub)
-				if currentData == nil {
+				dcs, err := FetchRuleStock(state, sub.PlanCode, ovhSub)
+				if err != nil {
 					state.Logger.Warn("无法获取VPS "+sub.PlanCode+" 的数据中心信息", "vps_monitor")
 					continue
 				}
-				dcsRaw, _ := currentData["datacenters"].([]interface{})
 				if sub.LastStatus == nil {
 					sub.LastStatus = map[string]string{}
 				}
@@ -231,85 +250,80 @@ func MonitorLoop(state *app.State) {
 				initialAvailable := []map[string]interface{}{}
 				newAvailable := []map[string]interface{}{}
 				newUnavailable := []map[string]interface{}{}
-				isFirstCheckOverall := len(lastStatus) == 0
+				isFirstCheckOverall := !hasAnyTrackStatus(lastStatus)
+				var orderTargets []orderTarget
 
-				for _, dcRaw := range dcsRaw {
-					dc, ok := dcRaw.(map[string]interface{})
-					if !ok {
+				tracks := []string{}
+				if sub.MonitorLinux {
+					tracks = append(tracks, "linux")
+				}
+				if sub.MonitorWindows {
+					tracks = append(tracks, "windows")
+				}
+				if len(tracks) == 0 {
+					tracks = []string{"linux"}
+				}
+
+				for _, dc := range dcs {
+					if len(monitoredDCs) > 0 && !dcMonitored(monitoredDCs, dc) {
 						continue
 					}
-					code, _ := dc["code"].(string)
-					name, _ := dc["datacenter"].(string)
-					currentStatus, _ := dc["status"].(string)
-					daysI64, _ := numconv.ToInt64(dc["daysBeforeDelivery"])
-					days := int(daysI64)
-
-					if len(monitoredDCs) > 0 {
-						found := false
-						for _, m := range monitoredDCs {
-							if m == code {
-								found = true
-								break
+					for _, track := range tracks {
+						cur := TrackStatus(dc, track)
+						had := HasTrackStatus(lastStatus, dc.Code, track)
+						avail := TrackAvailable(dc, track)
+						key := StatusKey(dc.Code, track)
+						row := map[string]interface{}{
+							"name":   dc.Name,
+							"code":   dc.Code,
+							"status": cur,
+							"days":   dc.Days,
+							"track":  track,
+						}
+						if !had {
+							initialAvailable = append(initialAvailable, row)
+							if avail {
+								sub.History = append(sub.History, map[string]interface{}{
+									"timestamp":      time.Now().Format(time.RFC3339Nano),
+									"datacenter":     dc.Name,
+									"datacenterCode": dc.Code,
+									"status":         cur,
+									"changeType":     "available",
+									"oldStatus":      nil,
+									"osTrack":        track,
+								})
+							}
+						} else {
+							old := lastStatus[key]
+							if IsUnavailable(old) && avail {
+								newAvailable = append(newAvailable, row)
+								sub.History = append(sub.History, map[string]interface{}{
+									"timestamp":      time.Now().Format(time.RFC3339Nano),
+									"datacenter":     dc.Name,
+									"datacenterCode": dc.Code,
+									"status":         cur,
+									"changeType":     "available",
+									"oldStatus":      old,
+									"osTrack":        track,
+								})
+								if ShouldAutoOrder(true, true, true, sub.AutoOrder, sub.AutoOrderAccountID) {
+									orderTargets = append(orderTargets, orderTarget{dc: dc, track: track})
+								}
+							} else if !IsUnavailable(old) && IsUnavailable(cur) {
+								newUnavailable = append(newUnavailable, row)
+								sub.History = append(sub.History, map[string]interface{}{
+									"timestamp":      time.Now().Format(time.RFC3339Nano),
+									"datacenter":     dc.Name,
+									"datacenterCode": dc.Code,
+									"status":         cur,
+									"changeType":     "unavailable",
+									"oldStatus":      old,
+									"osTrack":        track,
+								})
 							}
 						}
-						if !found {
-							continue
-						}
+						lastStatus[key] = cur
 					}
-					oldStatus, hasOld := lastStatus[code]
-					if !hasOld {
-						initialAvailable = append(initialAvailable, map[string]interface{}{
-							"name":   name,
-							"code":   code,
-							"status": currentStatus,
-							"days":   days,
-						})
-						if currentStatus != "out-of-stock" && currentStatus != "out-of-stock-preorder-allowed" {
-							sub.History = append(sub.History, map[string]interface{}{
-								"timestamp":      time.Now().Format(time.RFC3339Nano),
-								"datacenter":     name,
-								"datacenterCode": code,
-								"status":         currentStatus,
-								"changeType":     "available",
-								"oldStatus":      nil,
-							})
-						}
-					} else {
-						wasUnavail := oldStatus == "out-of-stock" || oldStatus == "out-of-stock-preorder-allowed"
-						isUnavail := currentStatus == "out-of-stock" || currentStatus == "out-of-stock-preorder-allowed"
-						if wasUnavail && !isUnavail {
-							newAvailable = append(newAvailable, map[string]interface{}{
-								"name":   name,
-								"code":   code,
-								"status": currentStatus,
-								"days":   days,
-							})
-							sub.History = append(sub.History, map[string]interface{}{
-								"timestamp":      time.Now().Format(time.RFC3339Nano),
-								"datacenter":     name,
-								"datacenterCode": code,
-								"status":         currentStatus,
-								"changeType":     "available",
-								"oldStatus":      oldStatus,
-							})
-						} else if !wasUnavail && isUnavail {
-							newUnavailable = append(newUnavailable, map[string]interface{}{
-								"name":   name,
-								"code":   code,
-								"status": currentStatus,
-								"days":   days,
-							})
-							sub.History = append(sub.History, map[string]interface{}{
-								"timestamp":      time.Now().Format(time.RFC3339Nano),
-								"datacenter":     name,
-								"datacenterCode": code,
-								"status":         currentStatus,
-								"changeType":     "unavailable",
-								"oldStatus":      oldStatus,
-							})
-						}
-					}
-					lastStatus[code] = currentStatus
 				}
 
 				if isFirstCheckOverall && len(initialAvailable) > 0 && sub.NotifyAvailable {
@@ -319,6 +333,9 @@ func MonitorLoop(state *app.State) {
 					if len(newAvailable) > 0 && sub.NotifyAvailable {
 						state.Logger.Info(fmt.Sprintf("VPS %s 补货：%d个数据中心", sub.PlanCode, len(newAvailable)), "vps_monitor")
 						SendSummaryNotification(state, sub.PlanCode, newAvailable, "available")
+					}
+					if len(orderTargets) > 0 {
+						enqueueVPSRestock(state, sub, ovhSub, orderTargets)
 					}
 					if len(newUnavailable) > 0 && sub.NotifyUnavailable {
 						state.Logger.Info(fmt.Sprintf("VPS %s 下架：%d个数据中心", sub.PlanCode, len(newUnavailable)), "vps_monitor")
@@ -405,4 +422,90 @@ func Running() bool {
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	return running
+}
+
+type orderTarget struct {
+	dc    DatacenterStock
+	track string
+}
+
+func hasAnyTrackStatus(last map[string]string) bool {
+	for k := range last {
+		if strings.Contains(k, "|") {
+			return true
+		}
+	}
+	return false
+}
+
+func dcMonitored(list []string, dc DatacenterStock) bool {
+	for _, m := range list {
+		if m == dc.Code || strings.EqualFold(m, dc.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func enqueueVPSRestock(state *app.State, sub *types.VPSSubscription, subsidiary string, targets []orderTarget) {
+	qty := sub.Quantity
+	if qty < 1 {
+		qty = 1
+	}
+	if qty > 20 {
+		qty = 20
+	}
+	osImage := sub.OSImage
+	backup := sub.BackupPlan
+	if backup == "" {
+		backup = "1"
+	}
+	if osImage == "" {
+		if plans, err := LoadPlans(state, subsidiary); err == nil {
+			if plan, ok := FindPlan(plans, sub.PlanCode); ok {
+				osImage = DefaultOSImage(plan, targets[0].track)
+			}
+		}
+	}
+	if osImage == "" {
+		osImage = "Ubuntu 24.04"
+	}
+	for _, t := range targets {
+		img := osImage
+		if sub.OSImage == "" && t.track == "windows" {
+			if plans, err := LoadPlans(state, subsidiary); err == nil {
+				if plan, ok := FindPlan(plans, sub.PlanCode); ok {
+					img = DefaultOSImage(plan, "windows")
+				}
+			}
+		}
+		for i := 0; i < qty; i++ {
+			item := types.QueueItem{
+				AccountID:     sub.AutoOrderAccountID,
+				PlanCode:      sub.PlanCode,
+				Datacenter:    t.dc.Code,
+				ProductKind:   "vps",
+				QuickOrder:    true,
+				RetryInterval: 30,
+				VpsSpec: &types.VpsOrderSpec{
+					Subsidiary:     subsidiary,
+					DatacenterName: t.dc.Name,
+					DatacenterCode: t.dc.Code,
+					OSTrack:        t.track,
+					OSImage:        img,
+					BackupPlan:     backup,
+					Infrastructure: "production",
+				},
+			}
+			if _, err := purchase.Enqueue(state, item); err != nil {
+				if err == purchase.ErrDuplicate {
+					state.Logger.Info(fmt.Sprintf("VPS 入队跳过重复 %s@%s %s", sub.PlanCode, t.dc.Code, t.track), "vps_monitor")
+					break
+				}
+				state.Logger.Warn("VPS 入队失败: "+err.Error(), "vps_monitor")
+			} else {
+				state.Logger.Info(fmt.Sprintf("VPS 已入队 %s@%s %s (%d/%d)", sub.PlanCode, t.dc.Code, t.track, i+1, qty), "vps_monitor")
+			}
+		}
+	}
 }

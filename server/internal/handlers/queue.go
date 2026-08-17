@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/ovh-buy/server/internal/app"
+	"github.com/ovh-buy/server/internal/purchase"
 	"github.com/ovh-buy/server/internal/types"
 )
 
@@ -16,11 +16,13 @@ import (
 func AddQueueItem(state *app.State) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
-			AccountID     string   `json:"account_id"`
-			PlanCode      string   `json:"planCode"`
-			Datacenter    string   `json:"datacenter"`
-			Options       []string `json:"options"`
-			RetryInterval int      `json:"retryInterval"`
+			AccountID     string              `json:"account_id"`
+			PlanCode      string              `json:"planCode"`
+			Datacenter    string              `json:"datacenter"`
+			Options       []string            `json:"options"`
+			RetryInterval int                 `json:"retryInterval"`
+			ProductKind   string              `json:"productKind"`
+			VpsSpec       *types.VpsOrderSpec `json:"vpsSpec"`
 		}
 		_ = c.ShouldBindJSON(&body)
 		if body.AccountID == "" {
@@ -35,24 +37,25 @@ func AddQueueItem(state *app.State) gin.HandlerFunc {
 			body.RetryInterval = 30
 		}
 		item := types.QueueItem{
-			ID:            uuid.NewString(),
 			AccountID:     body.AccountID,
 			PlanCode:      body.PlanCode,
 			Datacenter:    body.Datacenter,
 			Options:       body.Options,
-			Status:        "running",
-			CreatedAt:     types.NowISO(),
-			UpdatedAt:     types.NowISO(),
 			RetryInterval: body.RetryInterval,
-			RetryCount:    0,
-			LastCheckTime: 0,
+			ProductKind:   body.ProductKind,
+			VpsSpec:       body.VpsSpec,
 		}
-		state.QueueMu.Lock()
-		state.Queue = append(state.Queue, item)
-		state.QueueMu.Unlock()
-		_ = state.SaveQueue()
-		state.Logger.Info("添加任务 "+item.ID+" ("+item.PlanCode+" 在 "+item.Datacenter+", 账户 "+body.AccountID+") 到队列并立即启动 (状态: running)", "")
-		c.JSON(http.StatusOK, gin.H{"status": "success", "id": item.ID})
+		queued, err := purchase.Enqueue(state, item)
+		if err == purchase.ErrDuplicate {
+			c.JSON(http.StatusOK, gin.H{"status": "error", "error": "队列中已有相同任务"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "error": err.Error()})
+			return
+		}
+		state.Logger.Info("添加任务 "+queued.ID+" ("+queued.PlanCode+" 在 "+queued.Datacenter+", 账户 "+body.AccountID+") 到队列并立即启动 (状态: running)", "")
+		c.JSON(http.StatusOK, gin.H{"status": "success", "id": queued.ID})
 	}
 }
 

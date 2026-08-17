@@ -41,3 +41,30 @@ func (db *DB) ClearCatalogs() error {
 	_, err := db.Exec(`DELETE FROM catalogs`)
 	return err
 }
+
+func (db *DB) GetVPSCatalog(subsidiary string) (raw string, updatedAtMs int64, ok bool, err error) {
+	row := struct {
+		Data      string `db:"data"`
+		UpdatedAt int64  `db:"updated_at"`
+	}{}
+	err = db.Get(&row, `SELECT data, updated_at FROM vps_catalogs WHERE subsidiary = ?`, subsidiary)
+	if err == sql.ErrNoRows {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, fmt.Errorf("vps catalog get %s: %w", subsidiary, err)
+	}
+	return row.Data, row.UpdatedAt, true, nil
+}
+
+func (db *DB) UpsertVPSCatalog(subsidiary, data string) error {
+	_, err := db.Exec(
+		`INSERT INTO vps_catalogs(subsidiary, data, updated_at) VALUES(?, ?, ?)
+		 ON CONFLICT(subsidiary) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at`,
+		subsidiary, data, time.Now().UnixMilli(),
+	)
+	if err != nil {
+		return fmt.Errorf("vps catalog upsert %s: %w", subsidiary, err)
+	}
+	return nil
+}

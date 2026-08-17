@@ -23,6 +23,15 @@ export interface QueueItem {
   priority?: number;
   fromTelegram?: boolean;
   configSniperTaskId?: string;
+  productKind?: string;
+  vpsSpec?: {
+    subsidiary?: string;
+    datacenterName?: string;
+    datacenterCode?: string;
+    osTrack?: string;
+    osImage?: string;
+    backupPlan?: string;
+  };
 }
 
 /** 抢购队列列表 */

@@ -1,12 +1,21 @@
 package vps
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/ovh-buy/server/internal/app"
+)
 
 type CatalogPlan struct {
-	PlanCode        string              `json:"planCode"`
-	InvoiceName     string              `json:"invoiceName"`
-	Configurations  []CatalogConfig     `json:"configurations"`
-	AddonFamilies   []CatalogAddonFamily `json:"addonFamilies"`
+	PlanCode       string               `json:"planCode"`
+	InvoiceName    string               `json:"invoiceName"`
+	Configurations []CatalogConfig      `json:"configurations"`
+	AddonFamilies  []CatalogAddonFamily `json:"addonFamilies"`
 }
 
 type CatalogConfig struct {
@@ -22,18 +31,18 @@ type CatalogAddonFamily struct {
 }
 
 type Family struct {
-	ID     string      `json:"id"`
-	Label  string      `json:"label"`
-	Plans  []FamilyPlan `json:"plans"`
+	ID    string       `json:"id"`
+	Label string       `json:"label"`
+	Plans []FamilyPlan `json:"plans"`
 }
 
 type FamilyPlan struct {
-	PlanCode         string          `json:"planCode"`
-	InvoiceName      string          `json:"invoiceName"`
-	SupportsWindows  bool            `json:"supportsWindows"`
-	IsLocalZone      bool            `json:"isLocalZone"`
-	Datacenters      []FamilyDatacenter `json:"datacenters"`
-	OSImages         []string        `json:"osImages,omitempty"`
+	PlanCode        string             `json:"planCode"`
+	InvoiceName     string             `json:"invoiceName"`
+	SupportsWindows bool               `json:"supportsWindows"`
+	IsLocalZone     bool               `json:"isLocalZone"`
+	Datacenters     []FamilyDatacenter `json:"datacenters"`
+	OSImages        []string           `json:"osImages,omitempty"`
 }
 
 type FamilyDatacenter struct {
@@ -91,4 +100,60 @@ func BuildFamilies(plans []CatalogPlan, ruleDCs []DatacenterStock) []Family {
 		out[i].Plans = append(out[i].Plans, fp)
 	}
 	return out
+}
+
+const catalogTTL = 2 * time.Hour
+
+func FetchPublicCatalogJSON(subsidiary string) ([]byte, error) {
+	u := vpsAPIBaseURL(subsidiary) + "/1.0/order/catalog/public/vps?ovhSubsidiary=" + url.QueryEscape(subsidiary)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("accept", "application/json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vps catalog HTTP %d", resp.StatusCode)
+	}
+	return body, nil
+}
+
+func LoadPlans(state *app.State, subsidiary string) ([]CatalogPlan, error) {
+	if state != nil && state.DB != nil {
+		if raw, ts, ok, err := state.DB.GetVPSCatalog(subsidiary); err == nil && ok {
+			if time.Since(time.UnixMilli(ts)) < catalogTTL {
+				return ParseCatalogPlans([]byte(raw))
+			}
+		}
+	}
+	body, err := FetchPublicCatalogJSON(subsidiary)
+	if err != nil {
+		if state != nil && state.DB != nil {
+			if raw, _, ok, e2 := state.DB.GetVPSCatalog(subsidiary); e2 == nil && ok {
+				return ParseCatalogPlans([]byte(raw))
+			}
+		}
+		return nil, err
+	}
+	if state != nil && state.DB != nil {
+		_ = state.DB.UpsertVPSCatalog(subsidiary, string(body))
+	}
+	return ParseCatalogPlans(body)
+}
+
+func FindPlan(plans []CatalogPlan, code string) (CatalogPlan, bool) {
+	for _, p := range plans {
+		if p.PlanCode == code {
+			return p, true
+		}
+	}
+	return CatalogPlan{}, false
 }

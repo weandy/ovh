@@ -23,6 +23,8 @@ type historyRow struct {
 	AttemptCount   int            `db:"attempt_count"`
 	ExpirationTime string         `db:"expiration_time"`
 	PriceJSON      sql.NullString `db:"price"`
+	ProductKind    string         `db:"product_kind"`
+	VpsSpecJSON    string         `db:"vps_spec"`
 }
 
 func rowToHistory(r historyRow) types.PurchaseHistoryEntry {
@@ -45,6 +47,17 @@ func rowToHistory(r historyRow) types.PurchaseHistoryEntry {
 		s := r.ErrorMessage.String
 		errMsg = &s
 	}
+	var spec *types.VpsOrderSpec
+	if r.VpsSpecJSON != "" {
+		var s types.VpsOrderSpec
+		if err := json.Unmarshal([]byte(r.VpsSpecJSON), &s); err == nil {
+			spec = &s
+		}
+	}
+	kind := r.ProductKind
+	if kind == "" {
+		kind = "eco"
+	}
 	return types.PurchaseHistoryEntry{
 		ID:             r.ID,
 		AccountID:      r.AccountID,
@@ -60,6 +73,8 @@ func rowToHistory(r historyRow) types.PurchaseHistoryEntry {
 		AttemptCount:   r.AttemptCount,
 		ExpirationTime: r.ExpirationTime,
 		Price:          price,
+		ProductKind:    kind,
+		VpsSpec:        spec,
 	}
 }
 
@@ -84,6 +99,17 @@ func historyToRow(h types.PurchaseHistoryEntry) (historyRow, error) {
 		PurchaseTime:   h.PurchaseTime,
 		AttemptCount:   h.AttemptCount,
 		ExpirationTime: h.ExpirationTime,
+		ProductKind:    h.ProductKind,
+	}
+	if row.ProductKind == "" {
+		row.ProductKind = "eco"
+	}
+	if h.VpsSpec != nil {
+		b, err := json.Marshal(h.VpsSpec)
+		if err != nil {
+			return historyRow{}, err
+		}
+		row.VpsSpecJSON = string(b)
 	}
 	if h.ErrorMessage != nil {
 		row.ErrorMessage = sql.NullString{String: *h.ErrorMessage, Valid: true}
@@ -129,10 +155,10 @@ func (db *DB) ReplaceHistory(items []types.PurchaseHistoryEntry) error {
 		_, err = tx.NamedExec(`
 			INSERT INTO history
 			(id, account_id, task_id, plan_code, datacenter, options, status, order_id, order_url,
-			 error_message, purchase_time, attempt_count, expiration_time, price)
+			 error_message, purchase_time, attempt_count, expiration_time, price, product_kind, vps_spec)
 			VALUES
 			(:id, :account_id, :task_id, :plan_code, :datacenter, :options, :status, :order_id, :order_url,
-			 :error_message, :purchase_time, :attempt_count, :expiration_time, :price)
+			 :error_message, :purchase_time, :attempt_count, :expiration_time, :price, :product_kind, :vps_spec)
 		`, r)
 		if err != nil {
 			return fmt.Errorf("insert history %s: %w", h.ID, err)

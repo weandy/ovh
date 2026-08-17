@@ -2,6 +2,7 @@
 // 双 driver 设计：
 //   - CGO 可用时（默认 go build）走 mattn/go-sqlite3，性能更好；
 //   - CGO_ENABLED=0 时走 modernc.org/sqlite（纯 Go），零 C 依赖，方便交叉编译/无 gcc 环境。
+//
 // 切换由 build tag 自动完成，详见 driver_cgo.go / driver_purego.go。
 package db
 
@@ -71,6 +72,30 @@ func (db *DB) migrate() error {
 		return err
 	}
 	if err := db.addColumnIfMissing("vps_subscriptions", "auto_order_account_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("vps_subscriptions", "auto_order", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("vps_subscriptions", "quantity", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("vps_subscriptions", "os_image", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("vps_subscriptions", "backup_plan", "TEXT NOT NULL DEFAULT '1'"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("queue", "product_kind", "TEXT NOT NULL DEFAULT 'eco'"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("queue", "vps_spec", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("history", "product_kind", "TEXT NOT NULL DEFAULT 'eco'"); err != nil {
+		return err
+	}
+	if err := db.addColumnIfMissing("history", "vps_spec", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	return nil
