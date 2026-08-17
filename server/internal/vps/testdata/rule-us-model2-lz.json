@@ -1,0 +1,20 @@
+{
+  "datacenters": [
+    {
+      "datacenter": "US-WEST-LZ-SEA",
+      "code": "us-west-lz-sea",
+      "status": "available",
+      "linuxStatus": "available",
+      "windowsStatus": "out-of-stock",
+      "daysBeforeDelivery": 0
+    },
+    {
+      "datacenter": "US-EAST-LZ-ATL",
+      "code": "us-east-lz-atl",
+      "status": "out-of-stock",
+      "linuxStatus": "out-of-stock",
+      "windowsStatus": "out-of-stock",
+      "daysBeforeDelivery": 0
+    }
+  ]
+}

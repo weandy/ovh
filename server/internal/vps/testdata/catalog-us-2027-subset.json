@@ -1,0 +1,52 @@
+{
+  "plans": [
+    {
+      "planCode": "vps-2027-model1",
+      "invoiceName": "VPS-1 2027",
+      "configurations": [
+        { "name": "region", "values": ["united_states"] },
+        { "name": "vps_datacenter", "values": ["US-EAST-VA", "US-WEST-OR"] },
+        { "name": "vps_os", "values": ["Debian 12", "Ubuntu 24.04", "Ubuntu 26.04"] }
+      ],
+      "addonFamilies": [
+        { "name": "os", "mandatory": true, "exclusive": true, "addons": ["option-linux"] },
+        { "name": "storage", "mandatory": true, "exclusive": true, "addons": ["option-storage-local-2027-model1"] },
+        { "name": "automatedBackup", "mandatory": true, "exclusive": true, "addons": ["option-auto-backup-2027-1-model1", "option-auto-backup-2027-7-model1"] }
+      ]
+    },
+    {
+      "planCode": "vps-2027-model2",
+      "invoiceName": "VPS-2 2027",
+      "configurations": [
+        { "name": "region", "values": ["united_states"] },
+        { "name": "vps_datacenter", "values": ["US-EAST-VA", "US-WEST-OR"] },
+        { "name": "vps_os", "values": ["Debian 12", "Ubuntu 24.04", "Windows Server 2016 Standard (Desktop)", "Windows Server 2022 Standard (Desktop)", "Windows Server 2025 Standard (Desktop)"] }
+      ],
+      "addonFamilies": [
+        { "name": "os", "mandatory": true, "exclusive": true, "addons": ["option-linux", "option-windows-2027-model2"] },
+        { "name": "storage", "mandatory": true, "exclusive": true, "addons": ["option-storage-local-2027-model2"] },
+        { "name": "automatedBackup", "mandatory": true, "exclusive": true, "addons": ["option-auto-backup-2027-7-model2", "option-auto-backup-2027-1-model2"] }
+      ]
+    },
+    {
+      "planCode": "vps-2027-model2.LZ",
+      "invoiceName": "VPS-2 LZ 2027",
+      "configurations": [
+        { "name": "region", "values": ["united_states"] },
+        { "name": "vps_datacenter", "values": ["US-EAST-LZ-ATL", "US-WEST-LZ-SEA"] },
+        { "name": "vps_os", "values": ["Debian 12", "Ubuntu 24.04"] }
+      ],
+      "addonFamilies": [
+        { "name": "os", "mandatory": true, "exclusive": true, "addons": ["option-linux"] },
+        { "name": "storage", "mandatory": true, "exclusive": true, "addons": ["option-storage-remote-2027"] },
+        { "name": "automatedBackup", "mandatory": true, "exclusive": true, "addons": ["option-auto-backup-2027-7-model2.LZ", "option-auto-backup-2027-1-model2.LZ"] }
+      ]
+    },
+    {
+      "planCode": "vps-2027-model2-eu",
+      "invoiceName": "VPS-2 2027",
+      "configurations": [],
+      "addonFamilies": []
+    }
+  ]
+}

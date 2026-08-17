@@ -1,0 +1,20 @@
+{
+  "datacenters": [
+    {
+      "datacenter": "EU-WEST-LZ-AMS",
+      "code": "eu-west-lz-ams",
+      "status": "available",
+      "linuxStatus": "available",
+      "windowsStatus": "out-of-stock",
+      "daysBeforeDelivery": 0
+    },
+    {
+      "datacenter": "EU-WEST-LZ-BRU",
+      "code": "eu-west-lz-bru",
+      "status": "out-of-stock",
+      "linuxStatus": "out-of-stock",
+      "windowsStatus": "out-of-stock",
+      "daysBeforeDelivery": 0
+    }
+  ]
+}
