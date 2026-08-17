@@ -44,17 +44,15 @@ OVH 独立服务器 / Eco / **VPS 2027（含 Local Zone）** 的抢购、监控�
 # Windows PowerShell
 git clone https://github.com/weandy/ovh.git
 cd ovh
-git checkout feat/vps-2027-localzone-monitor-purchase
 ```
 
 ```bash
 # Linux / macOS
 git clone https://github.com/weandy/ovh.git
 cd ovh
-git checkout feat/vps-2027-localzone-monitor-purchase
 ```
 
-`feat/vps-2027-localzone-monitor-purchase` 是带 VPS 2027 / Local Zone 监控与 `/vps` 下单的分支。若已合并进 `main`，可直接用默认分支。
+默认分支是 `main`，已包含 VPS 2027 / Local Zone 监控与 `/vps` 下单。
 
 目录约定：
 
@@ -168,7 +166,6 @@ cd /opt
 sudo git clone https://github.com/weandy/ovh.git
 sudo chown -R "$USER:$USER" /opt/ovh
 cd /opt/ovh
-git checkout feat/vps-2027-localzone-monitor-purchase
 
 cd web
 npm install
