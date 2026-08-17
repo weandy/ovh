@@ -11,12 +11,27 @@ import (
 	"github.com/ovh-buy/server/internal/vps"
 )
 
+func resolveVPSListQuery(c *gin.Context) vps.ListQuery {
+	region := strings.TrimSpace(c.Query("region"))
+	accountZone := strings.ToUpper(strings.TrimSpace(c.Query("accountZone")))
+	legacy := strings.ToUpper(strings.TrimSpace(c.Query("ovhSubsidiary")))
+	if region == "" && legacy != "" {
+		return vps.ResolveListQuery(vps.RegionOfSubsidiary(legacy), firstNonEmpty(accountZone, legacy))
+	}
+	return vps.ResolveListQuery(region, accountZone)
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 func GetVPSCatalog(state *app.State) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sub := strings.ToUpper(strings.TrimSpace(c.Query("ovhSubsidiary")))
-		if sub == "" {
-			sub = "IE"
-		}
+		q := resolveVPSListQuery(c)
+		sub := q.CatalogSubsidiary
 		plans, err := vps.LoadPlans(state, sub)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "拉取 VPS catalog 失败: " + err.Error()})
@@ -35,6 +50,7 @@ func GetVPSCatalog(state *app.State) gin.HandlerFunc {
 			ruleDCs = append(ruleDCs, dcs...)
 		}
 		c.JSON(http.StatusOK, gin.H{
+			"region":     q.Region,
 			"subsidiary": sub,
 			"families":   vps.BuildFamilies(plans, ruleDCs),
 		})
@@ -55,10 +71,8 @@ type vpsStockPlan struct {
 
 func GetVPSStock(state *app.State) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sub := strings.ToUpper(strings.TrimSpace(c.Query("ovhSubsidiary")))
-		if sub == "" {
-			sub = "IE"
-		}
+		q := resolveVPSListQuery(c)
+		sub := q.CatalogSubsidiary
 		plans, err := vps.LoadPlans(state, sub)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "拉取 VPS catalog 失败: " + err.Error()})
@@ -97,17 +111,20 @@ func GetVPSStock(state *app.State) gin.HandlerFunc {
 				dcs, err := vps.FetchRuleStock(state, p.PlanCode, sub)
 				if err != nil {
 					row.StockError = err.Error()
+					row.Datacenters = vps.MergePlanStock(p.PlanCode, vps.CatalogDatacenterNames(p), nil).Datacenters
 				} else {
-					row.Datacenters = vps.BuildPlanStock(p.PlanCode, dcs).Datacenters
+					row.Datacenters = vps.MergePlanStock(p.PlanCode, vps.CatalogDatacenterNames(p), dcs).Datacenters
 				}
 				out[i] = row
 			}(i, p)
 		}
 		wg.Wait()
 		c.JSON(http.StatusOK, gin.H{
-			"subsidiary": sub,
-			"currency":   vps.CurrencyForSubsidiary(sub),
-			"plans":      out,
+			"region":        q.Region,
+			"subsidiary":    sub,
+			"accountCanBuy": q.AccountCanBuy,
+			"currency":      vps.CurrencyForSubsidiary(sub),
+			"plans":         out,
 		})
 	}
 }

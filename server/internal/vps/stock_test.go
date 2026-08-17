@@ -72,6 +72,26 @@ func TestMonthlyPrice(t *testing.T) {
 	}
 }
 
+func TestMergePlanStockUsesCatalogDCs(t *testing.T) {
+	catalog := []string{"GRA", "SBG", "US-EAST-VA"}
+	rule := []DatacenterStock{{
+		Name: "GRA", Code: "gra",
+		Status: "available", LinuxStatus: "available", WindowsStatus: "out-of-stock",
+	}}
+	st := MergePlanStock("vps-2027-model2", catalog, rule)
+	if len(st.Datacenters) != 3 {
+		t.Fatalf("want 3 catalog DCs, got %+v", st.Datacenters)
+	}
+	gra := FindStockDC(st.Datacenters, "gra")
+	if gra.Linux != "available" || gra.Name != "GRA" {
+		t.Fatalf("GRA should keep rule stock: %+v", gra)
+	}
+	sbg := FindStockDCByName(st.Datacenters, "SBG")
+	if sbg.Name != "SBG" || sbg.Linux != "" {
+		t.Fatalf("SBG should appear even without rule: %+v", sbg)
+	}
+}
+
 func TestCurrencyForSubsidiary(t *testing.T) {
 	if CurrencyForSubsidiary("US") != "USD" {
 		t.Fatal(CurrencyForSubsidiary("US"))

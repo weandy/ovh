@@ -52,10 +52,10 @@ func checkTGOrStop(state *app.State) bool {
 // VPS 可用性接口是 public 的,但必须连对 region 才能查到对应 subsidiary 的 VPS。
 // 默认走 EU(覆盖大部分情况);CA / ASIA / SG / IN / AU 走 CA;US 走 US 独立域名。
 func vpsAPIBaseURL(subsidiary string) string {
-	switch strings.ToUpper(subsidiary) {
-	case "US":
+	switch RegionOfSubsidiary(subsidiary) {
+	case RegionUS:
 		return "https://api.us.ovhcloud.com"
-	case "CA", "QC", "ASIA", "SG", "AU", "IN", "MA", "TN", "SN", "WS":
+	case RegionCA:
 		return "https://ca.api.ovh.com"
 	default:
 		return "https://eu.api.ovh.com"

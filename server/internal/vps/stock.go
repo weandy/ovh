@@ -41,6 +41,67 @@ func FindStockDC(dcs []StockDC, code string) StockDC {
 	return StockDC{}
 }
 
+func FindStockDCByName(dcs []StockDC, name string) StockDC {
+	want := strings.ToUpper(name)
+	for _, d := range dcs {
+		if strings.ToUpper(d.Name) == want {
+			return d
+		}
+	}
+	return StockDC{}
+}
+
+func MergePlanStock(planCode string, catalogNames []string, rule []DatacenterStock) PlanStock {
+	byKey := map[string]DatacenterStock{}
+	for _, d := range rule {
+		if d.Name != "" {
+			byKey[strings.ToUpper(d.Name)] = d
+		}
+		if d.Code != "" {
+			byKey[strings.ToUpper(d.Code)] = d
+		}
+	}
+	seen := map[string]bool{}
+	out := PlanStock{PlanCode: planCode, Datacenters: []StockDC{}}
+	appendDC := func(d DatacenterStock, fallbackName string) {
+		name := d.Name
+		if name == "" {
+			name = fallbackName
+		}
+		key := strings.ToUpper(name)
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		code := d.Code
+		if code == "" {
+			code = strings.ToLower(name)
+		}
+		out.Datacenters = append(out.Datacenters, StockDC{
+			Name:     name,
+			Code:     code,
+			Headline: d.Status,
+			Linux:    d.LinuxStatus,
+			Windows:  d.WindowsStatus,
+			Days:     d.Days,
+		})
+	}
+	for _, name := range catalogNames {
+		if name == "" {
+			continue
+		}
+		if d, ok := byKey[strings.ToUpper(name)]; ok {
+			appendDC(d, name)
+			continue
+		}
+		appendDC(DatacenterStock{Name: name}, name)
+	}
+	for _, d := range rule {
+		appendDC(d, d.Name)
+	}
+	return out
+}
+
 func PlanHasBuyableStock(supportsWindows bool, dcs []DatacenterStock) bool {
 	for _, d := range dcs {
 		if TrackAvailable(d, "linux") {

@@ -32,6 +32,10 @@ func configValues(plan CatalogPlan, name string) []string {
 	return nil
 }
 
+func CatalogDatacenterNames(plan CatalogPlan) []string {
+	return configValues(plan, "vps_datacenter")
+}
+
 func DefaultOSImage(plan CatalogPlan, track string) string {
 	vals := configValues(plan, "vps_os")
 	if track == "windows" {

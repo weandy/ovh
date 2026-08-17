@@ -24,7 +24,9 @@ export interface VpsStockPlan {
 }
 
 export interface VpsStockResponse {
+  region: string;
   subsidiary: string;
+  accountCanBuy?: boolean;
   currency: string;
   plans: VpsStockPlan[];
 }
@@ -49,12 +51,16 @@ export function shortDcLabel(dc: VpsStockDC): string {
   return (parts[parts.length - 1] || dc.name || "?").toUpperCase();
 }
 
-export function useVPSStock(subsidiary: string) {
+export function useVPSStock(region: string, accountZone?: string) {
   return useQuery({
-    queryKey: qk.vpsStock(subsidiary),
+    queryKey: qk.vpsStock(region, accountZone),
     queryFn: async () =>
-      (await api.get<VpsStockResponse>("/vps-stock", { params: { ovhSubsidiary: subsidiary } })).data,
-    enabled: !!subsidiary,
+      (
+        await api.get<VpsStockResponse>("/vps-stock", {
+          params: { region, accountZone: accountZone || undefined },
+        })
+      ).data,
+    enabled: !!region,
     staleTime: 30_000,
   });
 }

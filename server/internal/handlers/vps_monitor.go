@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -68,7 +67,7 @@ func AddVPSSubscription(state *app.State) gin.HandlerFunc {
 			return
 		}
 		if body.OvhSubsidiary == "" {
-			body.OvhSubsidiary = "IE"
+			body.OvhSubsidiary = "US"
 		}
 		if body.AutoOrder && body.AutoOrderAccountID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "开启自动下单时必须选择 OVH 账户"})
@@ -80,10 +79,11 @@ func AddVPSSubscription(state *app.State) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "autoOrderAccountId 不存在"})
 				return
 			}
-			if !strings.EqualFold(acc.Zone, body.OvhSubsidiary) {
-				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "下单账户子公司 (" + acc.Zone + ") 必须与订阅 (" + body.OvhSubsidiary + ") 一致"})
+			if !vps.SameRegion(acc.Zone, body.OvhSubsidiary) {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": vps.CrossRegionError(acc.Zone, body.OvhSubsidiary)})
 				return
 			}
+			body.OvhSubsidiary = acc.Zone
 		}
 		if body.Quantity <= 0 {
 			body.Quantity = 1

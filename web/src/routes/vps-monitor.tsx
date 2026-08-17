@@ -11,7 +11,7 @@ import {
   Plus,
   AlertTriangle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ import {
 } from "@/hooks/use-vps-monitor";
 import { useVPSCatalog, type VpsCatalogPlan } from "@/hooks/use-vps-catalog";
 import { useTelegramVerify } from "@/hooks/use-telegram";
+import { OVH_REGIONS, regionOfSubsidiary, sameRegion } from "@/lib/ovh-regions";
+import { useDefaultAccount, useAccounts } from "@/hooks/use-accounts";
 
 /** VPS 补货通知 */
 export const Route = createFileRoute("/vps-monitor")({
@@ -64,18 +66,6 @@ const KNOWN_LABELS: Record<string, string> = {
   "vps-2027-model3": "VPS-3 2027",
   "vps-2027-model4": "VPS-4 2027",
 };
-
-const SUBSIDIARIES = [
-  { value: "US", label: "US 美国" },
-  { value: "IE", label: "IE 爱尔兰" },
-  { value: "FR", label: "FR 法国" },
-  { value: "GB", label: "GB 英国" },
-  { value: "DE", label: "DE 德国" },
-  { value: "ES", label: "ES 西班牙" },
-  { value: "IT", label: "IT 意大利" },
-  { value: "PL", label: "PL 波兰" },
-  { value: "CA", label: "CA 加拿大" },
-];
 
 function modelLabel(code: string): string {
   return KNOWN_LABELS[code] || code;
@@ -392,8 +382,15 @@ function AddVPSDialog({
   const create = useCreateVPSMonitorSubscription();
   const tgVerify = useTelegramVerify();
   const tgBlocked = tgVerify.data ? !tgVerify.data.ok : false;
-  const [ovhSubsidiary, setOvhSubsidiary] = useState("US");
-  const catalog = useVPSCatalog(ovhSubsidiary);
+  const defaultAcc = useDefaultAccount();
+  const accounts = useAccounts();
+  const [region, setRegion] = useState<"US" | "IE" | "CA">("US");
+  const [autoOrderAccountId, setAutoOrderAccountId] = useState("");
+  useEffect(() => {
+    if (defaultAcc?.zone) setRegion(regionOfSubsidiary(defaultAcc.zone));
+  }, [defaultAcc?.zone]);
+  const orderAcc = (accounts.data || []).find((a) => a.id === autoOrderAccountId);
+  const catalog = useVPSCatalog(region, orderAcc?.zone || defaultAcc?.zone);
   const [familyId, setFamilyId] = useState("vps-2027");
   const [vpsModel, setVpsModel] = useState("");
   const [selectedDCs, setSelectedDCs] = useState<string[]>([]);
@@ -403,7 +400,6 @@ function AddVPSDialog({
   const [notifyUnavailable, setNotifyUnavailable] = useState(false);
   const [autoOrder, setAutoOrder] = useState(false);
   const [quantity, setQuantity] = useState(1);
-  const [autoOrderAccountId, setAutoOrderAccountId] = useState("");
   const [osImage, setOsImage] = useState("");
   const [backupPlan, setBackupPlan] = useState("1");
 
@@ -439,10 +435,14 @@ function AddVPSDialog({
       toast.error("开启自动下单时必须选 OVH 账户");
       return;
     }
+    if (autoOrder && orderAcc && !sameRegion(orderAcc.zone, region)) {
+      toast.error(`${regionOfSubsidiary(orderAcc.zone)} 区账户不能购买 ${region} 区产品`);
+      return;
+    }
     create.mutate(
       {
         planCode: plan.planCode,
-        ovhSubsidiary,
+        ovhSubsidiary: orderAcc?.zone || region,
         datacenters: selectedDCs,
         monitorLinux,
         monitorWindows: plan.supportsWindows ? monitorWindows : false,
@@ -501,12 +501,12 @@ function AddVPSDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                OVH 子公司
+                OVH 区
               </label>
               <Select
-                value={ovhSubsidiary}
+                value={region}
                 onValueChange={(v) => {
-                  setOvhSubsidiary(v);
+                  setRegion(v as "US" | "IE" | "CA");
                   setVpsModel("");
                   setSelectedDCs([]);
                 }}
@@ -515,8 +515,8 @@ function AddVPSDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SUBSIDIARIES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
+                  {OVH_REGIONS.map((s) => (
+                    <SelectItem key={s.code} value={s.code}>
                       {s.label}
                     </SelectItem>
                   ))}
@@ -669,6 +669,11 @@ function AddVPSDialog({
                   下单账户 <span className="text-destructive">*</span>
                 </label>
                 <AccountSelect value={autoOrderAccountId} onChange={setAutoOrderAccountId} />
+                {orderAcc && !sameRegion(orderAcc.zone, region) && (
+                  <p className="text-[11px] text-destructive mt-1">
+                    该账户属于 {regionOfSubsidiary(orderAcc.zone)} 区，不能买 {region} 区产品
+                  </p>
+                )}
                 <p className="text-[11px] text-muted-foreground mt-1">不选账户 = 只通知不下单</p>
               </div>
               <div>

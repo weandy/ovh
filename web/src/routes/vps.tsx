@@ -46,50 +46,26 @@ import {
   type VpsStockPlan,
   type VpsStockDC,
 } from "@/hooks/use-vps-stock";
-import { OVH_SUBSIDIARIES } from "@/lib/ovh-subsidiaries";
+import { OVH_REGIONS, regionLabel, regionOfSubsidiary, sameRegion, type OvhRegion } from "@/lib/ovh-regions";
 
 export const Route = createFileRoute("/vps")({
   component: VpsListPage,
 });
 
-const SUB_LS = "ovh_vps_list_subsidiary";
-const SUB_MANUAL = "ovh_vps_list_subsidiary_manual";
-
 function VpsListPage() {
   const defaultAcc = useDefaultAccount();
-  const accountSub = defaultAcc?.zone;
-  const [subsidiary, setSubsidiary] = useState(() => {
-    try {
-      if (localStorage.getItem(SUB_MANUAL) === "1") {
-        return localStorage.getItem(SUB_LS) || "US";
-      }
-    } catch {
-      /* ignore */
-    }
-    return "US";
-  });
+  const accounts = useAccounts();
+  const [accountId, setAccountId] = useState("");
+  const [regionManual, setRegionManual] = useState<OvhRegion | null>(null);
 
   useEffect(() => {
-    if (!accountSub) return;
-    try {
-      if (localStorage.getItem(SUB_MANUAL) === "1") return;
-    } catch {
-      /* ignore */
-    }
-    setSubsidiary(accountSub);
-  }, [accountSub]);
+    if (!accountId && defaultAcc) setAccountId(defaultAcc.id);
+  }, [defaultAcc?.id, accountId]);
 
-  const changeSubsidiary = (v: string) => {
-    setSubsidiary(v);
-    try {
-      localStorage.setItem(SUB_LS, v);
-      localStorage.setItem(SUB_MANUAL, "1");
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const stockQ = useVPSStock(subsidiary);
+  const account = (accounts.data || []).find((a) => a.id === accountId);
+  const accountRegion = account ? regionOfSubsidiary(account.zone) : "US";
+  const region: OvhRegion = regionManual || accountRegion;
+  const stockQ = useVPSStock(region, account?.zone);
   const [search, setSearch] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [detailCode, setDetailCode] = useState<string | null>(null);
@@ -114,7 +90,7 @@ function VpsListPage() {
       <PageHeader
         icon={Cloud}
         title="VPS 列表"
-        description="按子公司看 2027 常规与 Local Zone 的实时库存；下单账户必须属于同一子公司"
+        description="按 OVH 三个区（US / IE 欧洲 / CA）看货架。默认跟当前账户所在区走，跨区不能下单"
         action={
           <Button
             variant="outline"
@@ -147,20 +123,27 @@ function VpsListPage() {
             <Filter className="w-3.5 h-3.5" />
             仅显示可用
           </Button>
-          <select
-            value={subsidiary}
-            onChange={(e) => changeSubsidiary(e.target.value)}
-            className="h-9 rounded-full border border-border bg-background px-3 text-[12px] font-medium focus:outline-none focus:ring-2 focus:ring-ring w-full sm:max-w-[280px]"
-          >
-            {OVH_SUBSIDIARIES.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.code} · {s.label}
-                {accountSub === s.code ? " · 我的账户" : ""}
-              </option>
+          <div className="w-full sm:w-[220px]">
+            <AccountSelect value={accountId} onChange={(id) => { setAccountId(id); setRegionManual(null); }} />
+          </div>
+          <div className="flex rounded-full border border-border p-0.5">
+            {OVH_REGIONS.map((r) => (
+              <button
+                key={r.code}
+                type="button"
+                title={r.hint}
+                onClick={() => setRegionManual(r.code)}
+                className={
+                  "h-8 px-3 rounded-full text-[12px] font-medium " +
+                  (region === r.code ? "bg-foreground text-background" : "text-muted-foreground")
+                }
+              >
+                {r.code}
+              </button>
             ))}
-          </select>
+          </div>
           <span className="text-[12px] text-muted-foreground whitespace-nowrap">
-            {stockQ.isPending ? "加载中..." : `共 ${filtered.length} 款`}
+            {stockQ.isPending ? "加载中..." : `${regionLabel(region)} · 共 ${filtered.length} 款`}
           </span>
         </CardContent>
       </Card>
@@ -184,7 +167,7 @@ function VpsListPage() {
           <EmptyState
             icon={Cloud}
             title="未找到 VPS"
-            description={list.length === 0 ? "该子公司没有 2027 / Local Zone 型号" : "没有匹配的搜索结果"}
+            description={list.length === 0 ? "该区没有 2027 / Local Zone 型号" : "没有匹配的搜索结果"}
           />
         </Card>
       ) : (
@@ -200,7 +183,9 @@ function VpsListPage() {
           {detail ? (
             <VpsDetail
               plan={detail}
-              subsidiary={subsidiary}
+              region={region}
+              accountId={accountId}
+              onAccountId={setAccountId}
               onClose={() => setDetailCode(null)}
             />
           ) : null}
@@ -313,28 +298,26 @@ function defaultWindowsImage(images: string[] | undefined): string {
 
 function VpsDetail({
   plan,
-  subsidiary,
+  region,
+  accountId,
+  onAccountId,
   onClose,
 }: {
   plan: VpsStockPlan;
-  subsidiary: string;
+  region: OvhRegion;
+  accountId: string;
+  onAccountId: (id: string) => void;
   onClose: () => void;
 }) {
   const create = useCreateQueueItem();
   const addMon = useCreateVPSMonitorSubscription();
-  const defaultAcc = useDefaultAccount();
   const accounts = useAccounts();
-  const [accountId, setAccountId] = useState("");
   const [osTrack, setOsTrack] = useState<"linux" | "windows">("linux");
   const [osImage, setOsImage] = useState("");
   const [backupPlan, setBackupPlan] = useState("1");
   const [selectedDCs, setSelectedDCs] = useState<string[]>([]);
   const [quantity, setQuantity] = useState("1");
   const [retryInterval, setRetryInterval] = useState("30");
-
-  useEffect(() => {
-    if (!accountId && defaultAcc) setAccountId(defaultAcc.id);
-  }, [defaultAcc?.id, accountId]);
 
   useEffect(() => {
     if (!plan.supportsWindows && osTrack === "windows") setOsTrack("linux");
@@ -346,7 +329,7 @@ function VpsDetail({
   }, [osTrack, plan.planCode, plan.osImages]);
 
   const account = (accounts.data || []).find((a) => a.id === accountId);
-  const zoneOk = !!account && account.zone.toUpperCase() === subsidiary.toUpperCase();
+  const zoneOk = !!account && sameRegion(account.zone, region);
 
   const images = osTrack === "windows" ? windowsImages(plan.osImages) : linuxImages(plan.osImages);
   const instock = plan.datacenters.filter((dc) => trackAvailable(dc, osTrack));
@@ -385,7 +368,8 @@ function VpsDetail({
         <div className="flex gap-1.5 flex-wrap text-[12px]">
           {plan.isLocalZone ? <Chip tone="info">Local Zone</Chip> : <Chip tone="default">2027 常规</Chip>}
           {!plan.supportsWindows && <Chip tone="default">仅 Linux</Chip>}
-          <Chip tone="default">子公司 {subsidiary}</Chip>
+          <Chip tone="default">{regionLabel(region)}</Chip>
+          {account && <Chip tone="default">账户子公司 {account.zone}</Chip>}
         </div>
 
         {plan.monthlyPrice != null && (
@@ -494,10 +478,10 @@ function VpsDetail({
           </h3>
           <div>
             <label className="block text-[11px] text-muted-foreground mb-1">OVH 账户 *</label>
-            <AccountSelect value={accountId} onChange={setAccountId} />
+            <AccountSelect value={accountId} onChange={onAccountId} />
             {account && !zoneOk && (
               <p className="text-[11px] text-destructive mt-1">
-                账户 Zone 是 {account.zone}，页面子公司是 {subsidiary}，不能下单。请换账户或换子公司。
+                当前看的是 {regionLabel(region)} 货架，账户 {account.name} 属于 {regionLabel(regionOfSubsidiary(account.zone))}。US / IE / CA 不能互相下单。
               </p>
             )}
           </div>
@@ -527,7 +511,7 @@ function VpsDetail({
           onClick={() =>
             addMon.mutate({
               planCode: plan.planCode,
-              ovhSubsidiary: subsidiary,
+              ovhSubsidiary: account?.zone || region,
               datacenters: selectedDCs.length > 0 ? selectedDCs : instock.map((d) => d.code),
               monitorLinux: osTrack === "linux",
               monitorWindows: osTrack === "windows",
@@ -543,7 +527,7 @@ function VpsDetail({
           disabled={selectedDCs.length === 0 || create.isPending || !accountId || !zoneOk || !osImage}
           onClick={async () => {
             if (!zoneOk) {
-              toast.error("账户子公司必须与页面子公司一致");
+              toast.error("账户所在区必须与当前货架区一致");
               return;
             }
             const result = await create.mutateAsync({
@@ -553,7 +537,7 @@ function VpsDetail({
               quantity: qty,
               retryInterval: Number(retryInterval) || 30,
               productKind: "vps",
-              subsidiary,
+              subsidiary: account?.zone || region,
               osTrack,
               osImage,
               backupPlan,

@@ -57,8 +57,8 @@ export const qk = {
     history: (id: string) => ["vps-monitor", "history", id] as const,
   },
 
-  vpsCatalog: (subsidiary: string) => ["vps-catalog", subsidiary] as const,
-  vpsStock: (subsidiary: string) => ["vps-stock", subsidiary] as const,
+  vpsCatalog: (region: string, accountZone?: string) => ["vps-catalog", region, accountZone || ""] as const,
+  vpsStock: (region: string, accountZone?: string) => ["vps-stock", region, accountZone || ""] as const,
 
   // 服务器控制（已购）
   serverControl: {
