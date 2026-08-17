@@ -3,7 +3,7 @@
 日期：2026-08-18  
 仓库：https://github.com/weandy/ovh（fork 自 [gokele/ovh](https://github.com/gokele/ovh) v0.0.8）  
 上游：`upstream` = `https://github.com/gokele/ovh.git`  
-状态：待确认后写实现计划
+状态：已确认（2026-08-18）。LZ = Local Zone。实现计划见 `docs/superpowers/plans/2026-08-18-vps-2027-monitor-purchase.md`。
 
 ## 1. 背景
 
@@ -17,7 +17,7 @@
 |---|---|---|
 | VPS-1 2027 | `vps-2027-model1` | 仅 Linux（catalog 无 Windows addon） |
 | VPS-2 2027 | `vps-2027-model2` | Linux + Windows |
-| VPS-2 LZ 2027 | `vps-2027-model2.LZ` | 仅 Linux |
+| VPS-2 LZ 2027（Local Zone） | `vps-2027-model2.LZ` | 仅 Linux |
 | VPS-3 2027 | `vps-2027-model3` | Linux + Windows |
 | VPS-4 2027 | `vps-2027-model4` | Linux + Windows |
 
