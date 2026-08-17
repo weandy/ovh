@@ -70,7 +70,9 @@ printf '%s\n' \
 
 浏览器打开 `http://服务器IP:19998`。常驻见第 4.4 节 systemd，把 `ExecStart` 指到这个文件即可。
 
-当前发布版本：**v0.1.0**。本机仍需能访问 OVH API；二进制本身不再依赖 Go / Node / SQLite。
+当前发布版本：**v0.2.0**。本机仍需能访问 OVH API；二进制本身不再依赖 Go / Node / SQLite。
+
+登录后侧栏 **抢购 → VPS 列表**（`/vps`）可看 2027 / Local Zone 实时库存并入队；**监控 → VPS 补货** 仍用于等货。
 
 ### 0. 从源码构建时你需要准备什么
 
@@ -473,9 +475,10 @@ curl http://127.0.0.1:19998/health
 
 ### VPS 2027 / Local Zone
 
-- 目录接口 `GET /api/vps-catalog?ovhSubsidiary=US` 动态出型号，不写死 2025。
-- 库存用公开接口 `/v1/vps/order/rule/datacenter`，按 `linuxStatus` / `windowsStatus` 判定。
-- 自动下单走 `/order/cart/{id}/vps`，补齐 os、磁盘、1 天备份；`autoPayWithPreferredPaymentMethod=false`。
+- **VPS 列表** `/vps`：卡片 + 机房 Linux/Windows 灯，点进去选系统轨、镜像、有货机房再进抢购队列（对齐服务器列表）。
+- **VPS 补货** `/vps-monitor`：没货时盯库存轨，翻有货再通知 / 自动入队。
+- 目录 `GET /api/vps-catalog`，实时库存 `GET /api/vps-stock`，下单 `/order/cart/{id}/vps`。Local Zone 与 VPS-1 仅 Linux。
+- 默认不代扣。
 
 ### 已购管理
 

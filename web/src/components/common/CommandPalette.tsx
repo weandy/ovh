@@ -26,6 +26,7 @@ interface NavEntry {
 const NAV_ENTRIES: NavEntry[] = [
   { to: "/", label: "仪表盘", group: "概览", icon: BarChart3, shortcut: "G D" },
   { to: "/servers", label: "服务器列表", group: "抢购", icon: Server, shortcut: "G S" },
+  { to: "/vps", label: "VPS 列表", group: "抢购", icon: Cloud, shortcut: "G P" },
   { to: "/queue", label: "抢购队列", group: "抢购", icon: ClipboardList, shortcut: "G Q" },
   { to: "/monitor", label: "服务器监控", group: "监控", icon: Bell, shortcut: "G M" },
   { to: "/vps-monitor", label: "VPS 补货", group: "监控", icon: Cloud, shortcut: "G V" },
@@ -79,7 +80,7 @@ export function CommandPalette() {
       }
       if (waiting) {
         const map: Record<string, string> = {
-          d: "/", s: "/servers", q: "/queue",
+          d: "/", s: "/servers", p: "/vps", q: "/queue",
           m: "/monitor", v: "/vps-monitor", c: "/server-control",
           h: "/history", l: "/logs",
         };

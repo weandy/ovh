@@ -58,6 +58,7 @@ export const qk = {
   },
 
   vpsCatalog: (subsidiary: string) => ["vps-catalog", subsidiary] as const,
+  vpsStock: (subsidiary: string) => ["vps-stock", subsidiary] as const,
 
   // 服务器控制（已购）
   serverControl: {

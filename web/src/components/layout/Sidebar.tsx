@@ -39,6 +39,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "抢购",
     items: [
       { to: "/servers", icon: Server, label: "服务器列表" },
+      { to: "/vps", icon: Cloud, label: "VPS 列表" },
       { to: "/queue", icon: ClipboardList, label: "抢购队列" },
     ],
   },

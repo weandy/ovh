@@ -59,6 +59,12 @@ export function useCreateQueueItem() {
       options?: string[];
       retryInterval?: number;
       quantity?: number;
+      productKind?: string;
+      subsidiary?: string;
+      osTrack?: string;
+      osImage?: string;
+      backupPlan?: string;
+      dcNames?: Record<string, string>;
     }) => {
       const qty = Math.max(1, payload.quantity ?? 1);
       const dcs = payload.datacenters;
@@ -67,13 +73,26 @@ export function useCreateQueueItem() {
       for (const dc of dcs) {
         for (let i = 0; i < qty; i++) {
           try {
-            await api.post("/queue", {
+            const body: Record<string, unknown> = {
               account_id: payload.account_id,
               planCode: payload.planCode,
               datacenter: dc,
               retryInterval: payload.retryInterval,
               options: payload.options || [],
-            });
+            };
+            if (payload.productKind === "vps") {
+              body.productKind = "vps";
+              body.vpsSpec = {
+                subsidiary: payload.subsidiary,
+                datacenterName: payload.dcNames?.[dc] || dc,
+                datacenterCode: dc,
+                osTrack: payload.osTrack,
+                osImage: payload.osImage,
+                backupPlan: payload.backupPlan || "1",
+                infrastructure: "production",
+              };
+            }
+            await api.post("/queue", body);
             success++;
           } catch (e) {
             failed++;

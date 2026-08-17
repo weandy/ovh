@@ -16,6 +16,7 @@ type CatalogPlan struct {
 	InvoiceName    string               `json:"invoiceName"`
 	Configurations []CatalogConfig      `json:"configurations"`
 	AddonFamilies  []CatalogAddonFamily `json:"addonFamilies"`
+	Pricings       []CatalogPricing     `json:"pricings"`
 }
 
 type CatalogConfig struct {
@@ -43,6 +44,8 @@ type FamilyPlan struct {
 	IsLocalZone     bool               `json:"isLocalZone"`
 	Datacenters     []FamilyDatacenter `json:"datacenters"`
 	OSImages        []string           `json:"osImages,omitempty"`
+	MonthlyPrice    *float64           `json:"monthlyPrice,omitempty"`
+	Currency        string             `json:"currency,omitempty"`
 }
 
 type FamilyDatacenter struct {

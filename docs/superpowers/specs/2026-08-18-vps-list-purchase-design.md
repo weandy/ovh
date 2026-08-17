@@ -2,7 +2,7 @@
 
 日期：2026-08-18  
 仓库：https://github.com/weandy/ovh  
-状态：待确认后写实现计划  
+状态：已实现（v0.2.0）。计划见 `docs/superpowers/plans/2026-08-18-vps-list-purchase.md`。  
 前序：`docs/superpowers/specs/2026-08-18-vps-2027-monitor-purchase-design.md`（监控 + `/vps` cart 已落地）
 
 ## 1. 要做什么

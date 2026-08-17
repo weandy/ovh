@@ -337,6 +337,7 @@ func main() {
 		}
 
 		api.GET("/vps-catalog", handlers.GetVPSCatalog(state))
+		api.GET("/vps-stock", handlers.GetVPSStock(state))
 
 		// VPS monitor
 		api.GET("/vps-monitor/subscriptions", handlers.GetVPSSubscriptions(state))

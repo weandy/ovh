@@ -10,6 +10,7 @@ import { MobileMenu } from "./MobileMenu";
 const PAGE_META: Record<string, { group: string; label: string }> = {
   "/": { group: "概览", label: "仪表盘" },
   "/servers": { group: "抢购", label: "服务器列表" },
+  "/vps": { group: "抢购", label: "VPS 列表" },
   "/queue": { group: "抢购", label: "抢购队列" },
   "/monitor": { group: "监控", label: "服务器监控" },
   "/vps-monitor": { group: "监控", label: "VPS 补货" },

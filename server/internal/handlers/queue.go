@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -29,9 +30,20 @@ func AddQueueItem(state *app.State) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "缺少 account_id"})
 			return
 		}
-		if _, ok := state.FindAccount(body.AccountID); !ok {
+		acc, ok := state.FindAccount(body.AccountID)
+		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "account_id 不存在"})
 			return
+		}
+		if body.ProductKind == "vps" {
+			if body.VpsSpec == nil || body.VpsSpec.Subsidiary == "" || body.VpsSpec.DatacenterName == "" || body.VpsSpec.OSTrack == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "VPS 任务缺少 vpsSpec（subsidiary / datacenterName / osTrack）"})
+				return
+			}
+			if !strings.EqualFold(acc.Zone, body.VpsSpec.Subsidiary) {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "账户子公司 (" + acc.Zone + ") 必须与 VPS 订阅子公司 (" + body.VpsSpec.Subsidiary + ") 一致"})
+				return
+			}
 		}
 		if body.RetryInterval == 0 {
 			body.RetryInterval = 30
