@@ -37,18 +37,20 @@ server/
     └── vps/             # VPS 可用性查询
 ```
 
+完整生产部署（单二进制、systemd、反向代理、VPS 2027 首次配置、排错）见仓库根目录 [README.md](../README.md) 的「部署教程」。
+
 ## 运行
 
 ```bash
 cd server
 cp .env.example .env
-# 编辑 .env：OVH AppKey/AppSecret/ConsumerKey、API_KEY（前端访问凭据）等
+# 编辑 .env：至少改 API_SECRET_KEY
 
 go mod tidy
 go run .
 ```
 
-默认监听 `:19998`。
+默认监听 `:19998`。开发态不含前端，请同时 `cd ../web && npm run dev`，浏览器走 `:19997`。
 
 ## 环境变量
 
