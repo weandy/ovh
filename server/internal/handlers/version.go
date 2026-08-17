@@ -28,7 +28,7 @@ func GetVersion(state *app.State) gin.HandlerFunc {
 
 // updateRepo GitHub 上游仓库。换源时改这里就行。
 const (
-	updateRepo      = "gokele/ovh"
+	updateRepo      = "weandy/ovh"
 	updateUserAgent = "OVH-Console-UpdateChecker"
 )
 

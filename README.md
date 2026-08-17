@@ -21,16 +21,65 @@ OVH 独立服务器 / Eco / **VPS 2027（含 Local Zone）** 的抢购、监控�
 
 ## 部署教程
 
-下面按「能在一台干净机器上从零跑起来」写。生产推荐**方式 A（单二进制）**；改代码用方式 B。
+不想装 Go / Node 的，先走下面「直接下载」。要自己改代码或交叉编译，从第 0 节往后看。
 
-### 0. 你需要准备什么
+### 直接下载（不用自己编译）
+
+预编译单文件在 **[Releases](https://github.com/weandy/ovh/releases/latest)**，已打进前端界面。
+
+| 系统 | 下载文件 |
+|---|---|
+| Windows 64 位 | `ovh-server-windows-amd64.exe` |
+| Linux 64 位 | `ovh-server-linux-amd64` |
+
+**Windows**
+
+1. 建一个空目录，例如 `C:\ovh-run`。
+2. 把 `ovh-server-windows-amd64.exe` 放进去，可改名为 `ovh-server.exe`。
+3. 同目录新建 `.env`（可用仓库里的 [`server/.env.example`](server/.env.example)）：
+
+```bash
+API_SECRET_KEY=请改成足够长的随机串
+PORT=19998
+LISTEN_HOST=
+ENABLE_API_KEY_AUTH=true
+GIN_MODE=release
+DEBUG=false
+```
+
+4. 双击或在该目录执行 `.\ovh-server.exe`。
+5. 浏览器打开 http://127.0.0.1:19998 ，用 `API_SECRET_KEY` 登录，再按第 7、8 节加 OVH 账户和 VPS 监控。
+
+`data\` 会建在 exe 旁边，里面有数据库和密钥，整夹备份即可换机。
+
+**Linux**
+
+```bash
+mkdir -p /opt/ovh-run && cd /opt/ovh-run
+# 把 ovh-server-linux-amd64 拷进来后：
+chmod +x ovh-server-linux-amd64
+printf '%s\n' \
+  'API_SECRET_KEY=请改成足够长的随机串' \
+  'PORT=19998' \
+  'LISTEN_HOST=' \
+  'ENABLE_API_KEY_AUTH=true' \
+  'GIN_MODE=release' \
+  'DEBUG=false' > .env
+./ovh-server-linux-amd64
+```
+
+浏览器打开 `http://服务器IP:19998`。常驻见第 4.4 节 systemd，把 `ExecStart` 指到这个文件即可。
+
+当前发布版本：**v0.1.0**。本机仍需能访问 OVH API；二进制本身不再依赖 Go / Node / SQLite。
+
+### 0. 从源码构建时你需要准备什么
 
 | 项目 | 要求 | 说明 |
 |---|---|---|
 | 操作系统 | Windows 10/11、Linux（x86_64）或 macOS | 本文以 Windows 和 Debian/Ubuntu 为例 |
 | Git | 任意近期版本 | 拉代码 |
 | Go | **1.22+**（`go.mod` 声明 1.25） | 首次 `go build` 若提示升级 toolchain，按提示执行或安装新版 Go |
-| Node.js | **20 LTS 或 22 LTS** | 只在构建前端时需要；跑起来的单二进制不再依赖 Node |
+| Node.js | **20 LTS 或 22 LTS** | 只在**自己编译**前端时需要；下载的现成二进制不需要 Node |
 | npm | 随 Node 安装 | 不要用太老的 16 |
 | 出网 | 能访问 `api.us.ovhcloud.com` / `eu.api.ovh.com` / `ca.api.ovh.com` | 库存与下单都走官方 API |
 | OVH API 密钥 | Application Key + Secret + Consumer Key | 见第 2 节 |
