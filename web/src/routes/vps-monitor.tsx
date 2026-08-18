@@ -331,7 +331,9 @@ function VPSHistoryPanel({ id }: { id: string }) {
         <span className="text-sm font-medium">变化历史</span>
       </div>
       {entries.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4">暂无历史记录</p>
+        <p className="text-xs text-muted-foreground text-center py-4">
+          暂无历史。监控跑过一轮后会写入首次检查（含无货）。全无货的 Local Zone 以前不会记历史。
+        </p>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {entries.map((e, i) => (
@@ -340,16 +342,17 @@ function VPSHistoryPanel({ id }: { id: string }) {
               className="flex items-start gap-3 p-2.5 bg-muted/40 rounded-xl text-xs"
             >
               <StatusDot
-                tone={e.changeType === "available" ? "success" : "danger"}
+                tone={e.changeType === "available" ? "success" : e.changeType === "initial" ? "muted" : "danger"}
                 size="sm"
                 className="mt-1"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium">{e.datacenter}</span>
-                  <Chip tone={e.changeType === "available" ? "success" : "danger"}>
-                    {e.changeType === "available" ? "有货" : "无货"}
+                  <Chip tone={e.changeType === "available" ? "success" : e.changeType === "initial" ? "default" : "danger"}>
+                    {e.changeType === "available" ? "补货有货" : e.changeType === "initial" ? "首次检查" : "变为无货"}
                   </Chip>
+                  {e.status ? <span className="text-muted-foreground font-mono">{e.status}</span> : null}
                 </div>
                 <p className="text-muted-foreground mt-1">{formatTime(e.timestamp)}</p>
               </div>

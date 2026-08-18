@@ -73,7 +73,7 @@ func CheckVPSDCAvailability(state *app.State, planCode, ovhSubsidiary string) ma
 	params.Set("planCode", planCode)
 	fullURL := u + "?" + params.Encode()
 
-	state.Logger.Info(fmt.Sprintf("检查VPS可用性: %s (subsidiary: %s)", planCode, ovhSubsidiary), "vps_monitor")
+	state.Logger.Info(fmt.Sprintf("拉取 VPS rule: %s (subsidiary: %s)", planCode, ovhSubsidiary), "vps")
 
 	req, _ := http.NewRequest(http.MethodGet, fullURL, nil)
 	req.Header.Set("accept", "application/json")
@@ -241,18 +241,6 @@ func MonitorLoop(state *app.State) {
 					state.Logger.Warn("无法获取VPS "+sub.PlanCode+" 的数据中心信息", "vps_monitor")
 					continue
 				}
-				if sub.LastStatus == nil {
-					sub.LastStatus = map[string]string{}
-				}
-				lastStatus := sub.LastStatus
-				monitoredDCs := sub.Datacenters
-
-				initialAvailable := []map[string]interface{}{}
-				newAvailable := []map[string]interface{}{}
-				newUnavailable := []map[string]interface{}{}
-				isFirstCheckOverall := !hasAnyTrackStatus(lastStatus)
-				var orderTargets []orderTarget
-
 				tracks := []string{}
 				if sub.MonitorLinux {
 					tracks = append(tracks, "linux")
@@ -260,92 +248,26 @@ func MonitorLoop(state *app.State) {
 				if sub.MonitorWindows {
 					tracks = append(tracks, "windows")
 				}
-				if len(tracks) == 0 {
-					tracks = []string{"linux"}
-				}
+				isFirstCheckOverall := !hasAnyTrackStatus(sub.LastStatus)
+				tick := RecordMonitorTick(sub.History, sub.LastStatus, dcs, sub.Datacenters, tracks, time.Now())
+				sub.History = tick.History
+				sub.LastStatus = tick.LastStatus
 
-				for _, dc := range dcs {
-					if len(monitoredDCs) > 0 && !dcMonitored(monitoredDCs, dc) {
-						continue
-					}
-					for _, track := range tracks {
-						cur := TrackStatus(dc, track)
-						had := HasTrackStatus(lastStatus, dc.Code, track)
-						avail := TrackAvailable(dc, track)
-						key := StatusKey(dc.Code, track)
-						row := map[string]interface{}{
-							"name":   dc.Name,
-							"code":   dc.Code,
-							"status": cur,
-							"days":   dc.Days,
-							"track":  track,
-						}
-						if !had {
-							initialAvailable = append(initialAvailable, row)
-							if avail {
-								sub.History = append(sub.History, map[string]interface{}{
-									"timestamp":      time.Now().Format(time.RFC3339Nano),
-									"datacenter":     dc.Name,
-									"datacenterCode": dc.Code,
-									"status":         cur,
-									"changeType":     "available",
-									"oldStatus":      nil,
-									"osTrack":        track,
-								})
-							}
-						} else {
-							old := lastStatus[key]
-							if IsUnavailable(old) && avail {
-								newAvailable = append(newAvailable, row)
-								sub.History = append(sub.History, map[string]interface{}{
-									"timestamp":      time.Now().Format(time.RFC3339Nano),
-									"datacenter":     dc.Name,
-									"datacenterCode": dc.Code,
-									"status":         cur,
-									"changeType":     "available",
-									"oldStatus":      old,
-									"osTrack":        track,
-								})
-								if ShouldAutoOrder(true, true, true, sub.AutoOrder, sub.AutoOrderAccountID) {
-									orderTargets = append(orderTargets, orderTarget{dc: dc, track: track})
-								}
-							} else if !IsUnavailable(old) && IsUnavailable(cur) {
-								newUnavailable = append(newUnavailable, row)
-								sub.History = append(sub.History, map[string]interface{}{
-									"timestamp":      time.Now().Format(time.RFC3339Nano),
-									"datacenter":     dc.Name,
-									"datacenterCode": dc.Code,
-									"status":         cur,
-									"changeType":     "unavailable",
-									"oldStatus":      old,
-									"osTrack":        track,
-								})
-							}
-						}
-						lastStatus[key] = cur
-					}
-				}
-
-				if isFirstCheckOverall && len(initialAvailable) > 0 && sub.NotifyAvailable {
-					state.Logger.Info(fmt.Sprintf("VPS %s 初始状态检查完成，%d个数据中心", sub.PlanCode, len(initialAvailable)), "vps_monitor")
-					SendSummaryNotification(state, sub.PlanCode, initialAvailable, "initial")
+				if isFirstCheckOverall && len(tick.FirstSeen) > 0 && sub.NotifyAvailable {
+					state.Logger.Info(fmt.Sprintf("VPS %s 初始状态检查完成，%d个数据中心", sub.PlanCode, len(tick.FirstSeen)), "vps_monitor")
+					SendSummaryNotification(state, sub.PlanCode, tick.FirstSeen, "initial")
 				} else {
-					if len(newAvailable) > 0 && sub.NotifyAvailable {
-						state.Logger.Info(fmt.Sprintf("VPS %s 补货：%d个数据中心", sub.PlanCode, len(newAvailable)), "vps_monitor")
-						SendSummaryNotification(state, sub.PlanCode, newAvailable, "available")
+					if len(tick.BecameAvail) > 0 && sub.NotifyAvailable {
+						state.Logger.Info(fmt.Sprintf("VPS %s 补货：%d个数据中心", sub.PlanCode, len(tick.BecameAvail)), "vps_monitor")
+						SendSummaryNotification(state, sub.PlanCode, tick.BecameAvail, "available")
 					}
-					if len(orderTargets) > 0 {
-						enqueueVPSRestock(state, sub, ovhSub, orderTargets)
+					if sub.AutoOrder && sub.AutoOrderAccountID != "" && len(tick.OrderTargets) > 0 {
+						enqueueVPSRestock(state, sub, ovhSub, tick.OrderTargets)
 					}
-					if len(newUnavailable) > 0 && sub.NotifyUnavailable {
-						state.Logger.Info(fmt.Sprintf("VPS %s 下架：%d个数据中心", sub.PlanCode, len(newUnavailable)), "vps_monitor")
-						SendSummaryNotification(state, sub.PlanCode, newUnavailable, "unavailable")
+					if len(tick.BecameUnavail) > 0 && sub.NotifyUnavailable {
+						state.Logger.Info(fmt.Sprintf("VPS %s 下架：%d个数据中心", sub.PlanCode, len(tick.BecameUnavail)), "vps_monitor")
+						SendSummaryNotification(state, sub.PlanCode, tick.BecameUnavail, "unavailable")
 					}
-				}
-
-				sub.LastStatus = lastStatus
-				if len(sub.History) > 100 {
-					sub.History = sub.History[len(sub.History)-100:]
 				}
 				time.Sleep(time.Second)
 			}

@@ -75,6 +75,7 @@ export function useVPSMonitorHistory(id: string | null) {
     queryFn: async () =>
       (await api.get<VPSMonitorHistoryEntry[]>(`/vps-monitor/subscriptions/${id}/history`)).data,
     enabled: !!id,
+    refetchInterval: 10_000,
   });
 }
 
