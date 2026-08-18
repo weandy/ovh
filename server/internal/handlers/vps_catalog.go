@@ -78,45 +78,82 @@ func GetVPSStock(state *app.State) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "拉取 VPS catalog 失败: " + err.Error()})
 			return
 		}
-		var targets []vps.CatalogPlan
-		for _, p := range plans {
-			fam := vps.ClassifyPlan(p.PlanCode)
-			if fam == vps.Family2027 || fam == vps.Family2027LZ {
-				targets = append(targets, p)
-			}
-		}
-		out := make([]vpsStockPlan, len(targets))
+		groups := vps.GroupLocationVariants(plans)
+		out := make([]vpsStockPlan, len(groups))
 		var wg sync.WaitGroup
-		for i, p := range targets {
+		for i, g := range groups {
 			wg.Add(1)
-			go func(i int, p vps.CatalogPlan) {
+			go func(i int, g vps.LocationGroup) {
 				defer wg.Done()
+				base := g.Siblings[0]
+				for _, s := range g.Siblings {
+					if vps.LocationSuffix(s.PlanCode) == "" {
+						base = s
+						break
+					}
+				}
 				row := vpsStockPlan{
-					PlanCode:        p.PlanCode,
-					InvoiceName:     p.InvoiceName,
-					SupportsWindows: vps.SupportsWindows(p),
-					IsLocalZone:     vps.ClassifyPlan(p.PlanCode) == vps.Family2027LZ,
+					PlanCode:        g.Canonical,
+					InvoiceName:     g.InvoiceName,
+					SupportsWindows: vps.SupportsWindows(base),
+					IsLocalZone:     vps.ClassifyPlan(g.Canonical) == vps.Family2027LZ,
 					Currency:        vps.CurrencyForSubsidiary(sub),
 					OSImages:        nil,
 					Datacenters:     []vps.StockDC{},
 				}
-				for _, c := range p.Configurations {
+				for _, c := range base.Configurations {
 					if c.Name == "vps_os" {
 						row.OSImages = c.Values
 					}
 				}
-				if price, ok := vps.MonthlyPrice(p); ok {
+				if price, ok := vps.MonthlyPrice(base); ok {
 					row.MonthlyPrice = &price
 				}
-				dcs, err := vps.FetchRuleStock(state, p.PlanCode, sub)
-				if err != nil {
-					row.StockError = err.Error()
-					row.Datacenters = vps.MergePlanStock(p.PlanCode, vps.CatalogDatacenterNames(p), nil).Datacenters
-				} else {
-					row.Datacenters = vps.MergePlanStock(p.PlanCode, vps.CatalogDatacenterNames(p), dcs).Datacenters
+				var (
+					rule []vps.DatacenterStock
+					errs []string
+					mu   sync.Mutex
+					rwg  sync.WaitGroup
+				)
+				type q struct{ plan, sub string }
+				queries := []q{}
+				seen := map[string]bool{}
+				addQ := func(plan, s string) {
+					k := plan + "|" + s
+					if plan == "" || s == "" || seen[k] {
+						return
+					}
+					seen[k] = true
+					queries = append(queries, q{plan, s})
+				}
+				for _, s := range g.Siblings {
+					addQ(s.PlanCode, sub)
+				}
+				for _, extra := range vps.ExtraRuleQueries(g.Canonical, sub) {
+					addQ(extra[0], extra[1])
+				}
+				for _, query := range queries {
+					rwg.Add(1)
+					go func(query q) {
+						defer rwg.Done()
+						dcs, err := vps.FetchRuleStock(state, query.plan, query.sub)
+						mu.Lock()
+						defer mu.Unlock()
+						if err != nil {
+							errs = append(errs, query.plan+"@"+query.sub+": "+err.Error())
+							return
+						}
+						rule = append(rule, dcs...)
+					}(query)
+				}
+				rwg.Wait()
+				names := vps.CatalogNamesFromGroup(g)
+				row.Datacenters = vps.AnnotateOrderPlans(vps.MergePlanStock(g.Canonical, names, rule).Datacenters, g.Siblings)
+				if len(row.Datacenters) == 0 && len(errs) > 0 {
+					row.StockError = strings.Join(errs, "; ")
 				}
 				out[i] = row
-			}(i, p)
+			}(i, g)
 		}
 		wg.Wait()
 		c.JSON(http.StatusOK, gin.H{

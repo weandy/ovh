@@ -46,7 +46,7 @@ import {
   type VpsStockPlan,
   type VpsStockDC,
 } from "@/hooks/use-vps-stock";
-import { OVH_REGIONS, regionLabel, regionOfSubsidiary, sameRegion, type OvhRegion } from "@/lib/ovh-regions";
+import { regionOfSubsidiary } from "@/lib/ovh-regions";
 
 export const Route = createFileRoute("/vps")({
   component: VpsListPage,
@@ -56,7 +56,6 @@ function VpsListPage() {
   const defaultAcc = useDefaultAccount();
   const accounts = useAccounts();
   const [accountId, setAccountId] = useState("");
-  const [regionManual, setRegionManual] = useState<OvhRegion | null>(null);
 
   useEffect(() => {
     if (!accountId && defaultAcc) setAccountId(defaultAcc.id);
@@ -64,8 +63,7 @@ function VpsListPage() {
 
   const account = (accounts.data || []).find((a) => a.id === accountId);
   const accountRegion = account ? regionOfSubsidiary(account.zone) : "US";
-  const region: OvhRegion = regionManual || accountRegion;
-  const stockQ = useVPSStock(region, account?.zone);
+  const stockQ = useVPSStock(accountRegion, account?.zone);
   const [search, setSearch] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [detailCode, setDetailCode] = useState<string | null>(null);
@@ -90,7 +88,7 @@ function VpsListPage() {
       <PageHeader
         icon={Cloud}
         title="VPS 列表"
-        description="按 OVH 三个区（US / IE 欧洲 / CA）看货架。默认跟当前账户所在区走，跨区不能下单"
+        description="跟官网一样按账户店铺拉全球机房。美国账户买欧洲/加拿大机房走 -eu/-ca SKU，购物车仍用该账户"
         action={
           <Button
             variant="outline"
@@ -124,26 +122,10 @@ function VpsListPage() {
             仅显示可用
           </Button>
           <div className="w-full sm:w-[220px]">
-            <AccountSelect value={accountId} onChange={(id) => { setAccountId(id); setRegionManual(null); }} />
-          </div>
-          <div className="flex rounded-full border border-border p-0.5">
-            {OVH_REGIONS.map((r) => (
-              <button
-                key={r.code}
-                type="button"
-                title={r.hint}
-                onClick={() => setRegionManual(r.code)}
-                className={
-                  "h-8 px-3 rounded-full text-[12px] font-medium " +
-                  (region === r.code ? "bg-foreground text-background" : "text-muted-foreground")
-                }
-              >
-                {r.code}
-              </button>
-            ))}
+            <AccountSelect value={accountId} onChange={setAccountId} />
           </div>
           <span className="text-[12px] text-muted-foreground whitespace-nowrap">
-            {stockQ.isPending ? "加载中..." : `${regionLabel(region)} · 共 ${filtered.length} 款`}
+            {stockQ.isPending ? "加载中..." : `共 ${filtered.length} 款`}
           </span>
         </CardContent>
       </Card>
@@ -183,7 +165,6 @@ function VpsListPage() {
           {detail ? (
             <VpsDetail
               plan={detail}
-              region={region}
               accountId={accountId}
               onAccountId={setAccountId}
               onClose={() => setDetailCode(null)}
@@ -296,15 +277,19 @@ function defaultWindowsImage(images: string[] | undefined): string {
   return list.find((n) => n.includes("2022")) || list[list.length - 1] || "";
 }
 
+const CONTINENT_LABEL: Record<string, string> = {
+  europe: "Europe",
+  north_america: "North America",
+  asia_oceania: "Asia / Oceania",
+};
+
 function VpsDetail({
   plan,
-  region,
   accountId,
   onAccountId,
   onClose,
 }: {
   plan: VpsStockPlan;
-  region: OvhRegion;
   accountId: string;
   onAccountId: (id: string) => void;
   onClose: () => void;
@@ -329,7 +314,7 @@ function VpsDetail({
   }, [osTrack, plan.planCode, plan.osImages]);
 
   const account = (accounts.data || []).find((a) => a.id === accountId);
-  const zoneOk = !!account && sameRegion(account.zone, region);
+  const zoneOk = !!account;
 
   const images = osTrack === "windows" ? windowsImages(plan.osImages) : linuxImages(plan.osImages);
   const instock = plan.datacenters.filter((dc) => trackAvailable(dc, osTrack));
@@ -368,8 +353,7 @@ function VpsDetail({
         <div className="flex gap-1.5 flex-wrap text-[12px]">
           {plan.isLocalZone ? <Chip tone="info">Local Zone</Chip> : <Chip tone="default">2027 常规</Chip>}
           {!plan.supportsWindows && <Chip tone="default">仅 Linux</Chip>}
-          <Chip tone="default">{regionLabel(region)}</Chip>
-          {account && <Chip tone="default">账户子公司 {account.zone}</Chip>}
+          {account && <Chip tone="default">账户 {account.zone}</Chip>}
         </div>
 
         {plan.monthlyPrice != null && (
@@ -464,11 +448,20 @@ function VpsDetail({
               {selectedDCs.length > 0 ? "清空" : "选可用"}
             </Button>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {plan.datacenters.map((dc) => (
-              <DcPick key={dc.code} dc={dc} track={osTrack} selected={selectedDCs.includes(dc.code)} onToggle={() => toggleDC(dc.code)} />
-            ))}
-          </div>
+          {(["europe", "north_america", "asia_oceania"] as const).map((cont) => {
+            const dcs = plan.datacenters.filter((d) => (d.continent || "europe") === cont);
+            if (dcs.length === 0) return null;
+            return (
+              <div key={cont} className="mb-3 last:mb-0">
+                <div className="text-[11px] text-muted-foreground mb-1.5">{CONTINENT_LABEL[cont]}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {dcs.map((dc) => (
+                    <DcPick key={dc.code} dc={dc} track={osTrack} selected={selectedDCs.includes(dc.code)} onToggle={() => toggleDC(dc.code)} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="border-t border-border pt-4 space-y-3">
@@ -479,9 +472,9 @@ function VpsDetail({
           <div>
             <label className="block text-[11px] text-muted-foreground mb-1">OVH 账户 *</label>
             <AccountSelect value={accountId} onChange={onAccountId} />
-            {account && !zoneOk && (
-              <p className="text-[11px] text-destructive mt-1">
-                当前看的是 {regionLabel(region)} 货架，账户 {account.name} 属于 {regionLabel(regionOfSubsidiary(account.zone))}。US / IE / CA 不能互相下单。
+            {account?.zone === "US" && selectedDCs.some((c) => plan.datacenters.find((d) => d.code === c)?.outsideUnitedStates) && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                美国官网说明：美国以外机房交付后不能再改配或升级。
               </p>
             )}
           </div>
@@ -511,7 +504,7 @@ function VpsDetail({
           onClick={() =>
             addMon.mutate({
               planCode: plan.planCode,
-              ovhSubsidiary: account?.zone || region,
+              ovhSubsidiary: account?.zone || "US",
               datacenters: selectedDCs.length > 0 ? selectedDCs : instock.map((d) => d.code),
               monitorLinux: osTrack === "linux",
               monitorWindows: osTrack === "windows",
@@ -527,8 +520,12 @@ function VpsDetail({
           disabled={selectedDCs.length === 0 || create.isPending || !accountId || !zoneOk || !osImage}
           onClick={async () => {
             if (!zoneOk) {
-              toast.error("账户所在区必须与当前货架区一致");
+              toast.error("请选择 OVH 账户");
               return;
+            }
+            const orderPlanByDc: Record<string, string> = {};
+            for (const dc of plan.datacenters) {
+              if (dc.orderPlanCode) orderPlanByDc[dc.code] = dc.orderPlanCode;
             }
             const result = await create.mutateAsync({
               account_id: accountId,
@@ -537,7 +534,8 @@ function VpsDetail({
               quantity: qty,
               retryInterval: Number(retryInterval) || 30,
               productKind: "vps",
-              subsidiary: account?.zone || region,
+              subsidiary: account.zone,
+              orderPlanByDc,
               osTrack,
               osImage,
               backupPlan,

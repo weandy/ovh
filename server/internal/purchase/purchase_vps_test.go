@@ -136,3 +136,15 @@ func TestPurchaseVPSRequiresSpec(t *testing.T) {
 		t.Fatal("missing spec must fail")
 	}
 }
+
+func TestCartRegionForVPS(t *testing.T) {
+	if cartRegionForVPS("vps-2027-model1-eu", "GRA") != "europe" {
+		t.Fatal("eu sku")
+	}
+	if cartRegionForVPS("vps-2027-model1-ca", "BHS") != "canada" {
+		t.Fatal("ca sku")
+	}
+	if cartRegionForVPS("vps-2027-model1", "US-EAST-VA") != "united_states" {
+		t.Fatal("us sku")
+	}
+}

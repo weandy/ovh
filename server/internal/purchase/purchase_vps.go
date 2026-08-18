@@ -63,16 +63,21 @@ func purchaseVPSWith(state *app.State, client OVHCart, item *types.QueueItem) bo
 		return false
 	}
 
+	orderPlan := item.PlanCode
+	if spec.OrderPlanCode != "" {
+		orderPlan = spec.OrderPlanCode
+	}
+
 	var offers []map[string]interface{}
 	if err := client.Get("/order/cart/"+cartID+"/vps", &offers); err != nil {
 		recordFailure(state, item, "list vps offers: "+err.Error())
 		return false
 	}
-	duration, pricingMode := pickVPSOffer(offers, item.PlanCode)
+	duration, pricingMode := pickVPSOffer(offers, orderPlan)
 
 	var added map[string]interface{}
 	if err := client.Post("/order/cart/"+cartID+"/vps", map[string]interface{}{
-		"planCode":    item.PlanCode,
+		"planCode":    orderPlan,
 		"duration":    duration,
 		"pricingMode": pricingMode,
 		"quantity":    1,
@@ -93,7 +98,7 @@ func purchaseVPSWith(state *app.State, client OVHCart, item *types.QueueItem) bo
 	cfgs := []struct{ label, value string }{
 		{"vps_datacenter", spec.DatacenterName},
 		{"vps_os", osImage},
-		{"region", regionForVPS(spec.DatacenterName)},
+		{"region", cartRegionForVPS(orderPlan, spec.DatacenterName)},
 	}
 	var required []map[string]interface{}
 	if err := client.Get(fmt.Sprintf("/order/cart/%s/item/%d/requiredConfiguration", cartID, itemID), &required); err == nil {
@@ -117,7 +122,7 @@ func purchaseVPSWith(state *app.State, client OVHCart, item *types.QueueItem) bo
 	}
 
 	var optList []map[string]interface{}
-	if err := client.Get(fmt.Sprintf("/order/cart/%s/vps/options?planCode=%s", cartID, item.PlanCode), &optList); err != nil {
+	if err := client.Get(fmt.Sprintf("/order/cart/%s/vps/options?planCode=%s", cartID, orderPlan), &optList); err != nil {
 		recordFailure(state, item, "list vps options: "+err.Error())
 		return false
 	}
@@ -155,11 +160,22 @@ func purchaseVPSWith(state *app.State, client OVHCart, item *types.QueueItem) bo
 	return true
 }
 
+func cartRegionForVPS(orderPlanCode, datacenterName string) string {
+	switch {
+	case strings.HasSuffix(orderPlanCode, "-eu"):
+		return "europe"
+	case strings.HasSuffix(orderPlanCode, "-ca"):
+		return "canada"
+	}
+	return regionForVPS(datacenterName)
+}
+
 func regionForVPS(datacenterName string) string {
-	if strings.HasPrefix(datacenterName, "US-") {
+	u := strings.ToUpper(datacenterName)
+	if strings.HasPrefix(u, "US-") {
 		return "united_states"
 	}
-	if datacenterName == "BHS" {
+	if u == "BHS" || u == "SGP" || u == "SYD" || u == "YNM" {
 		return "canada"
 	}
 	return "europe"
@@ -213,8 +229,11 @@ func resolveVPSAddons(item *types.QueueItem, optList []map[string]interface{}) (
 			backup = item.VpsSpec.BackupPlan
 		}
 	}
-	// 从已返回的 options 里按 family 习惯挑，不依赖完整 catalog
-	wanted := pickAddonsFromList(item.PlanCode, track, backup, available)
+	plan := item.PlanCode
+	if item.VpsSpec != nil && item.VpsSpec.OrderPlanCode != "" {
+		plan = item.VpsSpec.OrderPlanCode
+	}
+	wanted := pickAddonsFromList(plan, track, backup, available)
 	hasStorage := false
 	for _, w := range wanted {
 		if strings.Contains(w, "option-storage-") {

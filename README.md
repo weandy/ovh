@@ -72,7 +72,7 @@ printf '%s\n' \
 
 当前发布版本：**v0.2.0**。本机仍需能访问 OVH API；二进制本身不再依赖 Go / Node / SQLite。
 
-登录后侧栏 **抢购 → VPS 列表**（`/vps`）按 OVH 三个区看货架（默认跟绑定账户所在区，没账户则 US），并入队；**监控 → VPS 补货** 仍用于等货。US 账户不能买 IE/CA 区产品，反过来也不行。
+登录后侧栏 **抢购 → VPS 列表**（`/vps`）跟官网一样列出该账户店铺能买的全球机房（美国 catalog 的 `-eu`/`-ca` SKU 会合并进同一张卡片），并入队；**监控 → VPS 补货** 仍用于等货。
 
 ### 0. 从源码构建时你需要准备什么
 
@@ -127,7 +127,7 @@ ovh/
    - `GET /vps*`、`GET /dedicated/server*`（库存与已购管理）
    - 若只要监控不下单，可以只给 GET。
 4. 美国账户填 Zone = `US`；爱尔兰 / 多数欧洲站填 `IE` 或实际子公司代码（`FR` `DE` `GB` …）。
-5. **US / IE / CA 三个区互不相通。** 美国账户不能买欧洲或加拿大区产品（包括欧洲 Local Zone，例如 `EU-WEST-LZ-AMS`）。同一区内，法国账户（`FR`）可以买欧洲货架，购物车仍用账户自己的子公司。
+5. **美国官网可以买欧洲/加拿大机房**（VPS-1 的 GRA、SBG、BHS 等）。下单仍用美国账户购物车，商品 SKU 是 `vps-2027-model1-eu` / `-ca`。官网写明：美国以外机房交付后不能改配或升级。
 
 凭据**不要写进 git**。启动后在网页里录入，落在本地 SQLite。
 
@@ -415,7 +415,7 @@ Windows 把 `data\sniper.db` 拷走即可。库里有 OVH 密钥，备份文件�
 | 单二进制打开是纯 API / 没有页面 | 漏了 `-tags ui`，或没先 `npx vite build`，`server/web/index.html` 不存在 |
 | 浏览器打不开 localhost | Windows 上 `localhost` 可能走 IPv6。保持 `LISTEN_HOST` 为空，或试 `http://127.0.0.1:19998` |
 | 添加 OVH 账户失败 | 密钥区域和 Zone 不一致（US 密钥配了 IE），或 Consumer Key 权限不够 |
-| 加不了 VPS 订阅 | 先配好 Telegram；自动下单必须选账户，且账户与货架必须同区（US / IE / CA） |
+| 加不了 VPS 订阅 | 先配好 Telegram；自动下单必须选账户 |
 | 监控到有货但队列失败 | 看「日志」和「抢购历史」。缺 `vps_datacenter` / storage addon 会 fail-fast 清购物车 |
 | 下了单但机器没出来 | 本程序默认不代扣。去 OVH 订单页付款 |
 | 端口被占 | 改 `PORT`，或关掉占用 19998 的旧进程 |
@@ -475,7 +475,7 @@ curl http://127.0.0.1:19998/health
 
 ### VPS 2027 / Local Zone
 
-- **VPS 列表** `/vps`：按 US / IE / CA 三区看货架（默认跟账户），卡片 + 机房 Linux/Windows 灯，点进去选系统轨、镜像、有货机房再进队列。
+- **VPS 列表** `/vps`：按账户店铺拉 catalog，把 `-eu`/`-ca` 机房合并进同一型号；库存同时打 US/IE/CA 公开 rule。点进去选系统轨、镜像、有货机房再进队列。
 - **VPS 补货** `/vps-monitor`：没货时盯库存轨，翻有货再通知 / 自动入队。
 - 目录 `GET /api/vps-catalog`，实时库存 `GET /api/vps-stock`（`region` + `accountZone`），下单 `/order/cart/{id}/vps`。跨区入队会被拒绝。Local Zone 与 VPS-1 仅 Linux。
 - 默认不代扣。

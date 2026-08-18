@@ -9,6 +9,9 @@ export interface VpsStockDC {
   linux: string;
   windows: string;
   daysBeforeDelivery: number;
+  orderPlanCode?: string;
+  continent?: "europe" | "north_america" | "asia_oceania" | string;
+  outsideUnitedStates?: boolean;
 }
 
 export interface VpsStockPlan {

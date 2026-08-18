@@ -65,6 +65,7 @@ export function useCreateQueueItem() {
       osImage?: string;
       backupPlan?: string;
       dcNames?: Record<string, string>;
+      orderPlanByDc?: Record<string, string>;
     }) => {
       const qty = Math.max(1, payload.quantity ?? 1);
       const dcs = payload.datacenters;
@@ -90,6 +91,7 @@ export function useCreateQueueItem() {
                 osImage: payload.osImage,
                 backupPlan: payload.backupPlan || "1",
                 infrastructure: "production",
+                orderPlanCode: payload.orderPlanByDc?.[dc] || payload.planCode,
               };
             }
             await api.post("/queue", body);

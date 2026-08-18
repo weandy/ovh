@@ -3,12 +3,15 @@ package vps
 import "strings"
 
 type StockDC struct {
-	Name     string `json:"name"`
-	Code     string `json:"code"`
-	Headline string `json:"headline"`
-	Linux    string `json:"linux"`
-	Windows  string `json:"windows"`
-	Days     int    `json:"daysBeforeDelivery"`
+	Name                string `json:"name"`
+	Code                string `json:"code"`
+	Headline            string `json:"headline"`
+	Linux               string `json:"linux"`
+	Windows             string `json:"windows"`
+	Days                int    `json:"daysBeforeDelivery"`
+	OrderPlanCode       string `json:"orderPlanCode,omitempty"`
+	Continent           string `json:"continent,omitempty"`
+	OutsideUnitedStates bool   `json:"outsideUnitedStates,omitempty"`
 }
 
 type PlanStock struct {
@@ -78,12 +81,14 @@ func MergePlanStock(planCode string, catalogNames []string, rule []DatacenterSto
 			code = strings.ToLower(name)
 		}
 		out.Datacenters = append(out.Datacenters, StockDC{
-			Name:     name,
-			Code:     code,
-			Headline: d.Status,
-			Linux:    d.LinuxStatus,
-			Windows:  d.WindowsStatus,
-			Days:     d.Days,
+			Name:                name,
+			Code:                code,
+			Headline:            d.Status,
+			Linux:               d.LinuxStatus,
+			Windows:             d.WindowsStatus,
+			Days:                d.Days,
+			Continent:           ContinentOfDC(name, code),
+			OutsideUnitedStates: OutsideUnitedStates(name, code),
 		})
 	}
 	for _, name := range catalogNames {
@@ -100,6 +105,15 @@ func MergePlanStock(planCode string, catalogNames []string, rule []DatacenterSto
 		appendDC(d, d.Name)
 	}
 	return out
+}
+
+func AnnotateOrderPlans(dcs []StockDC, siblings []CatalogPlan) []StockDC {
+	for i := range dcs {
+		dcs[i].OrderPlanCode = AssignOrderPlanCode(dcs[i].Name, siblings)
+		dcs[i].Continent = ContinentOfDC(dcs[i].Name, dcs[i].Code)
+		dcs[i].OutsideUnitedStates = OutsideUnitedStates(dcs[i].Name, dcs[i].Code)
+	}
+	return dcs
 }
 
 func PlanHasBuyableStock(supportsWindows bool, dcs []DatacenterStock) bool {

@@ -79,10 +79,6 @@ func AddVPSSubscription(state *app.State) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "autoOrderAccountId 不存在"})
 				return
 			}
-			if !vps.SameRegion(acc.Zone, body.OvhSubsidiary) {
-				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": vps.CrossRegionError(acc.Zone, body.OvhSubsidiary)})
-				return
-			}
 			body.OvhSubsidiary = acc.Zone
 		}
 		if body.Quantity <= 0 {

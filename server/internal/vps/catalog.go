@@ -81,19 +81,23 @@ func BuildFamilies(plans []CatalogPlan, ruleDCs []DatacenterStock) []Family {
 		{ID: FamilyOther, Label: "其他", Plans: []FamilyPlan{}},
 	}
 	idx := map[string]int{Family2027: 0, Family2027LZ: 1, FamilyOther: 2}
-	for _, p := range plans {
-		fam := ClassifyPlan(p.PlanCode)
-		if fam == FamilyDrop {
-			continue
+	for _, g := range GroupLocationVariants(plans) {
+		base := g.Siblings[0]
+		for _, s := range g.Siblings {
+			if LocationSuffix(s.PlanCode) == "" {
+				base = s
+				break
+			}
 		}
+		fam := ClassifyPlan(g.Canonical)
 		fp := FamilyPlan{
-			PlanCode:        p.PlanCode,
-			InvoiceName:     p.InvoiceName,
-			SupportsWindows: SupportsWindows(p),
+			PlanCode:        g.Canonical,
+			InvoiceName:     g.InvoiceName,
+			SupportsWindows: SupportsWindows(base),
 			IsLocalZone:     fam == Family2027LZ,
-			OSImages:        configValues(p, "vps_os"),
+			OSImages:        configValues(base, "vps_os"),
 		}
-		for _, name := range configValues(p, "vps_datacenter") {
+		for _, name := range CatalogNamesFromGroup(g) {
 			fp.Datacenters = append(fp.Datacenters, FamilyDatacenter{
 				Name: name,
 				Code: codes[name],
@@ -101,6 +105,21 @@ func BuildFamilies(plans []CatalogPlan, ruleDCs []DatacenterStock) []Family {
 		}
 		i := idx[fam]
 		out[i].Plans = append(out[i].Plans, fp)
+	}
+	for _, p := range plans {
+		if ClassifyPlan(p.PlanCode) != FamilyOther {
+			continue
+		}
+		fp := FamilyPlan{
+			PlanCode:        p.PlanCode,
+			InvoiceName:     p.InvoiceName,
+			SupportsWindows: SupportsWindows(p),
+			OSImages:        configValues(p, "vps_os"),
+		}
+		for _, name := range configValues(p, "vps_datacenter") {
+			fp.Datacenters = append(fp.Datacenters, FamilyDatacenter{Name: name, Code: codes[name]})
+		}
+		out[idx[FamilyOther]].Plans = append(out[idx[FamilyOther]].Plans, fp)
 	}
 	return out
 }

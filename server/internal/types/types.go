@@ -88,6 +88,7 @@ type VpsOrderSpec struct {
 	OSImage        string `json:"osImage"`
 	BackupPlan     string `json:"backupPlan"`
 	Infrastructure string `json:"infrastructure,omitempty"`
+	OrderPlanCode  string `json:"orderPlanCode,omitempty"`
 }
 
 // PriceInfo 价格信息

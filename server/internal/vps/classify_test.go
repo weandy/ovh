@@ -14,8 +14,9 @@ func TestClassifyPlan(t *testing.T) {
 		{"vps-2027-model1.LZ", Family2027LZ},
 		{"vps-2025-model1", FamilyOther},
 		{"vps-2025-model1.LZ", FamilyOther},
-		{"vps-2027-model2-eu", FamilyDrop},
-		{"vps-2027-model2-ca", FamilyDrop},
+		{"vps-2027-model2-eu", Family2027},
+		{"vps-2027-model2-ca", Family2027},
+		{"vps-2027-model2.LZ-eu", Family2027LZ},
 		{"vps-2027-model2-degressivity12", FamilyDrop},
 		{"vps-comfort-4-8-80-vps-2025-model2-10percent", FamilyDrop},
 	}

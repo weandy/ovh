@@ -10,7 +10,6 @@ import (
 	"github.com/ovh-buy/server/internal/app"
 	"github.com/ovh-buy/server/internal/purchase"
 	"github.com/ovh-buy/server/internal/types"
-	"github.com/ovh-buy/server/internal/vps"
 )
 
 // AddQueueItem POST /api/queue
@@ -41,12 +40,11 @@ func AddQueueItem(state *app.State) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "VPS 任务缺少 vpsSpec（subsidiary / datacenterName / osTrack）"})
 				return
 			}
-			if !vps.SameRegion(acc.Zone, body.VpsSpec.Subsidiary) {
-				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": vps.CrossRegionError(acc.Zone, body.VpsSpec.Subsidiary)})
-				return
-			}
-			// 购物车必须用账户自己的子公司，不能拿浏览用的区默认子公司（例如 IE）去给法国账号下单
+			// 购物车必须用账户子公司。美国账户买欧洲机房走 catalog 里的 -eu SKU，不是换 IE 账号。
 			body.VpsSpec.Subsidiary = acc.Zone
+			if body.VpsSpec.OrderPlanCode == "" {
+				body.VpsSpec.OrderPlanCode = body.PlanCode
+			}
 			if strings.EqualFold(body.VpsSpec.OSTrack, "windows") && strings.TrimSpace(body.VpsSpec.OSImage) == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Windows 轨必须指定镜像名"})
 				return

@@ -10,9 +10,9 @@ const (
 )
 
 var (
-	reShadow = regexp.MustCompile(`-(eu|ca)$|degressivity|percent`)
-	re2027   = regexp.MustCompile(`^vps-2027-model[0-9]+$`)
-	re2027LZ = regexp.MustCompile(`^vps-2027-model[0-9]+\.LZ$`)
+	reShadow = regexp.MustCompile(`degressivity|percent`)
+	re2027   = regexp.MustCompile(`^vps-2027-model[0-9]+(-eu|-ca)?$`)
+	re2027LZ = regexp.MustCompile(`^vps-2027-model[0-9]+\.LZ(-eu|-ca)?$`)
 )
 
 func ClassifyPlan(planCode string) string {
