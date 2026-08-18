@@ -1,6 +1,10 @@
 package vps
 
-import "testing"
+import (
+	"sort"
+	"strings"
+	"testing"
+)
 
 func TestCanonicalPlanCode(t *testing.T) {
 	cases := map[string]string{
@@ -75,8 +79,57 @@ func TestGroupLocationVariantsMergesUSStorefront(t *testing.T) {
 	}
 	names := CatalogNamesFromGroup(g)
 	if len(names) != 13 {
-		t.Fatalf("want 13 official locations, got %v", names)
+		t.Fatalf("catalog still lists 13 names including Asia leftovers, got %v", names)
 	}
+}
+
+func TestUSStorefrontDoesNotSellAsia(t *testing.T) {
+	catalog := []string{"US-EAST-VA", "US-WEST-OR", "GRA", "SBG", "BHS", "SGP", "SYD", "YNM"}
+	homeRules := []DatacenterStock{
+		{Name: "US-EAST-VA", Code: "us-east-vin"},
+		{Name: "US-WEST-OR", Code: "us-west-hil"},
+		{Name: "GRA", Code: "eu-west-gra"},
+		{Name: "SBG", Code: "eu-west-sbg"},
+		{Name: "BHS", Code: "ca-east-bhs"},
+	}
+	got := FilterStorefrontDCs(catalog, homeRules, "US")
+	for _, n := range got {
+		if ContinentOfDC(n, "") == ContinentAsiaOceania {
+			t.Fatalf("US storefront must not sell %s", n)
+		}
+	}
+	want := []string{"BHS", "GRA", "SBG", "US-EAST-VA", "US-WEST-OR"}
+	if stringsJoin(got) != stringsJoin(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+}
+
+func TestUSAccountRejectsAsiaDC(t *testing.T) {
+	if StorefrontAllowsDC("US", "SGP") {
+		t.Fatal("US cannot buy SGP")
+	}
+	if StorefrontAllowsDC("US", "SYD") {
+		t.Fatal("US cannot buy SYD")
+	}
+	if !StorefrontAllowsDC("US", "GRA") {
+		t.Fatal("US can buy GRA")
+	}
+	if !StorefrontAllowsDC("US", "BHS") {
+		t.Fatal("US can buy BHS")
+	}
+	if !StorefrontAllowsDC("SG", "SGP") {
+		t.Fatal("SG storefront can buy SGP")
+	}
+}
+
+func stringsJoin(in []string) string {
+	return strings.Join(sortedCopy(in), ",")
+}
+
+func sortedCopy(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
 }
 
 func TestCartRegionFromOrderPlan(t *testing.T) {

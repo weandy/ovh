@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ovh-buy/server/internal/app"
@@ -73,6 +74,16 @@ func ruleCodeByName(dcs []DatacenterStock) map[string]string {
 	return m
 }
 
+func ruleHasName(dcs []DatacenterStock, name string) bool {
+	want := strings.ToUpper(name)
+	for _, d := range dcs {
+		if strings.ToUpper(d.Name) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func BuildFamilies(plans []CatalogPlan, ruleDCs []DatacenterStock) []Family {
 	codes := ruleCodeByName(ruleDCs)
 	out := []Family{
@@ -98,6 +109,9 @@ func BuildFamilies(plans []CatalogPlan, ruleDCs []DatacenterStock) []Family {
 			OSImages:        configValues(base, "vps_os"),
 		}
 		for _, name := range CatalogNamesFromGroup(g) {
+			if len(codes) > 0 && codes[name] == "" && !ruleHasName(ruleDCs, name) {
+				continue
+			}
 			fp.Datacenters = append(fp.Datacenters, FamilyDatacenter{
 				Name: name,
 				Code: codes[name],

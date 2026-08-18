@@ -10,6 +10,7 @@ import (
 	"github.com/ovh-buy/server/internal/app"
 	"github.com/ovh-buy/server/internal/purchase"
 	"github.com/ovh-buy/server/internal/types"
+	"github.com/ovh-buy/server/internal/vps"
 )
 
 // AddQueueItem POST /api/queue
@@ -44,6 +45,14 @@ func AddQueueItem(state *app.State) gin.HandlerFunc {
 			body.VpsSpec.Subsidiary = acc.Zone
 			if body.VpsSpec.OrderPlanCode == "" {
 				body.VpsSpec.OrderPlanCode = body.PlanCode
+			}
+			dcName := body.VpsSpec.DatacenterName
+			if dcName == "" {
+				dcName = body.Datacenter
+			}
+			if !vps.StorefrontAllowsDC(acc.Zone, dcName) {
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "该账户店铺不能购买此机房（美国店铺不出售亚洲机房）"})
+				return
 			}
 			if strings.EqualFold(body.VpsSpec.OSTrack, "windows") && strings.TrimSpace(body.VpsSpec.OSImage) == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Windows 轨必须指定镜像名"})

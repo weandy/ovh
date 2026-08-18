@@ -59,6 +59,56 @@ func GroupLocationVariants(plans []CatalogPlan) []LocationGroup {
 	return out
 }
 
+func FilterStorefrontDCs(catalogNames []string, homeRules []DatacenterStock, accountSub string) []string {
+	allowed := map[string]bool{}
+	for _, d := range homeRules {
+		if d.Name != "" {
+			allowed[strings.ToUpper(d.Name)] = true
+		}
+		if d.Code != "" {
+			allowed[strings.ToUpper(d.Code)] = true
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	useRules := len(homeRules) > 0
+	for _, n := range catalogNames {
+		k := strings.ToUpper(n)
+		if n == "" || seen[k] {
+			continue
+		}
+		if useRules && !allowed[k] {
+			continue
+		}
+		if !StorefrontAllowsDC(accountSub, n) {
+			continue
+		}
+		seen[k] = true
+		out = append(out, n)
+	}
+	if useRules {
+		for _, d := range homeRules {
+			if d.Name == "" || seen[strings.ToUpper(d.Name)] {
+				continue
+			}
+			if !StorefrontAllowsDC(accountSub, d.Name) {
+				continue
+			}
+			seen[strings.ToUpper(d.Name)] = true
+			out = append(out, d.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func StorefrontAllowsDC(accountSub, dcName string) bool {
+	if RegionOfSubsidiary(accountSub) == RegionUS && ContinentOfDC(dcName, "") == ContinentAsiaOceania {
+		return false
+	}
+	return true
+}
+
 func CatalogNamesFromGroup(g LocationGroup) []string {
 	seen := map[string]bool{}
 	var names []string
@@ -148,27 +198,10 @@ func CartRegion(orderPlanCode, dcName string) string {
 	return "europe"
 }
 
-// ExtraRuleQueries 除账户子公司自己的 sibling rule 外，再打另外两个区的公开 rule。
-// 美国官网的欧洲/亚太机房来自 -eu/-ca SKU 以及 IE/CA 接口，不能只信 US catalog 的两条美国机房。
+// ExtraRuleQueries 不再跨区拉别人货架上的机房。
+// 美国店铺能卖的位置以美国 API 自己的 sibling rule 为准（欧洲 + 美国 + BHS，没有亚洲）。
 func ExtraRuleQueries(canonical, accountSub string) [][2]string {
-	acc := strings.ToUpper(strings.TrimSpace(accountSub))
-	var out [][2]string
-	seen := map[string]bool{}
-	add := func(plan, sub string) {
-		key := plan + "|" + sub
-		if plan == "" || sub == "" || seen[key] {
-			return
-		}
-		if strings.EqualFold(sub, acc) {
-			return
-		}
-		seen[key] = true
-		out = append(out, [2]string{plan, sub})
-	}
-	add(canonical, "US")
-	add(canonical, "IE")
-	add(canonical, "CA")
-	add(canonical+"-eu", "US")
-	add(canonical+"-ca", "US")
-	return out
+	_ = canonical
+	_ = accountSub
+	return nil
 }

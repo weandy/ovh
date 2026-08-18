@@ -147,7 +147,7 @@ func GetVPSStock(state *app.State) gin.HandlerFunc {
 					}(query)
 				}
 				rwg.Wait()
-				names := vps.CatalogNamesFromGroup(g)
+				names := vps.FilterStorefrontDCs(vps.CatalogNamesFromGroup(g), rule, sub)
 				row.Datacenters = vps.AnnotateOrderPlans(vps.MergePlanStock(g.Canonical, names, rule).Datacenters, g.Siblings)
 				if len(row.Datacenters) == 0 && len(errs) > 0 {
 					row.StockError = strings.Join(errs, "; ")
